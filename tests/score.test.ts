@@ -76,6 +76,15 @@ describe('churn', () => {
     expect(c.reason).toContain('94%')
   })
 
+  test('lines added in one file do not hide waste in another', () => {
+    const c = churn([change('src/a.ts', 300), change('src/b.ts', 20)], {
+      'src/a.ts': { ops: 1, added: 20, deleted: 0 },
+      'src/b.ts': { ops: 5, added: 400, deleted: 380 },
+    })
+    expect(c.raw.wasted).toBe(760)
+    expect(c.normalized!).toBeGreaterThan(0.8)
+  })
+
   test('files edited then reverted count as abandoned', () => {
     const c = churn([change('src/a.ts', 5)], {
       'src/a.ts': { ops: 1, added: 5, deleted: 0 },

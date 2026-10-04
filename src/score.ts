@@ -72,24 +72,29 @@ export function surface(changes: FileChange[]): Component {
       : `${plural(files, 'production file')} across ${dirs} director${dirs === 1 ? 'y' : 'ies'}, ${lines} lines`)
 }
 
+/**
+ * Edit volume the agent's tools performed versus what survived in the final
+ * diff, file by file: lines added elsewhere (or through a shell) cannot hide
+ * work that was thrown away in another file.
+ */
 export function churn(changes: FileChange[], edits: EditActivity): Component {
-  const paths = Object.keys(edits)
-  const volume = paths.reduce((n, p) => n + edits[p]!.added + edits[p]!.deleted, 0)
-  const final = changes.reduce((n, c) => n + c.added + c.deleted, 0)
-  const ops = paths.reduce((n, p) => n + edits[p]!.ops, 0)
+  const finalOf = new Map(changes.map(c => [c.path, c.added + c.deleted]))
+  const files = Object.entries(edits)
+  const volume = files.reduce((n, [, e]) => n + e.added + e.deleted, 0)
+  const ops = files.reduce((n, [, e]) => n + e.ops, 0)
   if (volume === 0) {
-    return component('churn', 'agent churn', null, { volume, final, ops },
-      'no edit-tool activity observed')
+    return component('churn', 'agent churn', null, { volume, ops }, 'no edit-tool activity observed')
   }
-  const survival = Math.min(1, final / volume)
-  const wasted = Math.max(0, volume - final)
-  const changed = new Set(changes.map(c => c.path))
-  const abandoned = paths.filter(p => !changed.has(p)).length
+  const wasted = files.reduce((n, [path, e]) => n + Math.max(0, e.added + e.deleted - (finalOf.get(path) ?? 0)), 0)
+  const survival = 1 - wasted / volume
+  const abandoned = files.filter(([path]) => !finalOf.has(path)).length
+  const rewritten = files.filter(([, e]) => e.ops >= 6).length
   const normalized = saturate(wasted, 200) * Math.sqrt(1 - survival)
   const parts = [`${Math.round((1 - survival) * 100)}% of ${volume} edited lines did not survive`]
   if (abandoned) parts.push(`${plural(abandoned, 'file')} edited then reverted or deleted`)
+  if (rewritten) parts.push(`${plural(rewritten, 'file')} edited 6+ times`)
   return component('churn', 'agent churn', normalized,
-    { volume, final, ops, survival: round(survival), abandoned }, parts.join('; '))
+    { volume, wasted, ops, survival: round(survival), abandoned, rewritten }, parts.join('; '))
 }
 
 function component(
