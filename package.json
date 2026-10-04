@@ -5,8 +5,11 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "test": "bun test tests/",
-    "typecheck": "tsc -p ."
+    "test": "bun test .spec.",
+    "typecheck": "tsc -p .",
+    "typecheck:ci": "tsc -p tsconfig.ci.json",
+    "validate": "claude plugin validate --strict .",
+    "test:mod": "claude plugin test ."
   },
   "devDependencies": {
     "@types/bun": "^1.4.2",

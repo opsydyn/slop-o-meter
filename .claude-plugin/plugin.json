@@ -18,7 +18,8 @@
       "type": "number",
       "title": "Slop budget",
       "description": "Advisory score budget per turn. Slop-O-Meter observes; it never blocks edits.",
-      "default": 40
+      "default": 40,
+      "required": false
     }
   }
 }

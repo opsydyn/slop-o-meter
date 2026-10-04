@@ -164,7 +164,10 @@ export const register: Register = (on, options) => {
     const t = e.props.isWorking ? await read($, turn) : null
     const files = t ? Object.keys(t.edits).length : 0
     const ops = t ? Object.values(t.edits).reduce((n, f) => n + f.ops, 0) : 0
+    // The band is shared: draw whatever other mods (and the engine) put beneath us too.
+    const below = await next(e)
     return (
+      <Box flexDirection="column">
       <Box>
         <Text bold>SLOP </Text>
         {record ? (
@@ -175,6 +178,8 @@ export const register: Register = (on, options) => {
           <Text dimColor>— no scored turns yet</Text>
         )}
         {t && <Text dimColor>  · analysing… {ops} edits in {files} files</Text>}
+      </Box>
+      {below}
       </Box>
     )
   })

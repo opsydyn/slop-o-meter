@@ -151,3 +151,19 @@ describe('scoreTurn', () => {
     expect(tiny.state).toBe('CLEAN')
   })
 })
+
+describe('comment noise', () => {
+  test('deleting code elsewhere does not make new comments excessive', () => {
+    const code = 'export function f(a: number) {\n  return a + 1\n}\n'.repeat(10)
+    const commented = '// why this exists, in a sentence\n' + code
+    const s = scoreTurn({
+      changes: [{ path: 'src/a.ts', added: 1, deleted: 0 }, { path: 'src/old.ts', added: 0, deleted: 30 }],
+      edits: {},
+      files: [
+        { path: 'src/a.ts', before: code, after: commented },
+        { path: 'src/old.ts', before: code, after: null },
+      ],
+    })
+    expect(s.components.find(c => c.key === 'comments')!.normalized).toBe(0)
+  })
+})

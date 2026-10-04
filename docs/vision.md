@@ -1,5 +1,3 @@
-this is the one i’d paste into a fresh claude code session in the new repo. it tells claude to **build**, not just discuss, and keeps the public git repo canonical from the start.
-
 # slop-o-meter — complete build handoff
 
 build an open-source Claude Code mod/plugin called **Slop-O-Meter**.
@@ -1919,9 +1917,3 @@ while building it, Slop-O-Meter should eventually catch you.
 when it does:
 
 **believe the meter.**
-
-i’ve also tightened two things from our earlier versions. mods really are plugins, and the current docs explicitly support an `AbovePrompt` band, panes, Desktop `Svg`, terminal `Raster`, `Client` regions for animation, and `$.ui.blit()` for updating a raster without a full redraw. :chatgpt-content-reference{index="0"}
-
-for open source, the current publishing flow also supports keeping `.claude-plugin/marketplace.json` in the **same repo**, pointing its plugin entry at `"./"`, then installing via a GitHub marketplace source. `claude plugin validate --strict` is the right release gate. :chatgpt-content-reference{index="1"}
-
-the strongest addition here is separating **turn slop** from **existing repository mud**. without that, the tool would punish an agent for touching legacy rubbish it didn't create, which would make the metric much less useful.

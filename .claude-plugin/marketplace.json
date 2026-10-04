@@ -1,0 +1,15 @@
+{
+  "name": "slop-o-meter",
+  "owner": { "name": "Alan Currie" },
+  "metadata": {
+    "description": "Slop-O-Meter: metrics-driven detection of AI-generated code slop for Claude Code"
+  },
+  "plugins": [
+    {
+      "name": "slop-o-meter",
+      "source": "./",
+      "description": "A 0-100 slop score for every code-changing turn, from git diffs and the agent's own edit activity. Not an LLM vibe score.",
+      "category": "development"
+    }
+  ]
+}

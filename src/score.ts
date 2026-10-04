@@ -382,9 +382,11 @@ export function duplication(code: Pair[], measurable: boolean): Component {
 export function comments(code: Pair[], measurable: boolean): Component {
   const prod = prodOf(code)
   const restating = Math.max(0, sum(prod, f => f.restating))
-  const commentLines = sum(prod, f => f.commentLines)
-  const codeLines = Math.max(0, sum(prod, f => f.codeLines))
-  const excess = Math.max(0, commentLines - 0.5 * codeLines)
+  // Per file and growth only: code deleted elsewhere must not make new comments look excessive.
+  const grown = (get: (f: Facts) => number) => prod.reduce((n, p) => n + Math.max(0, get(p.after) - get(p.before)), 0)
+  const commentLines = grown(f => f.commentLines)
+  const codeLines = grown(f => f.codeLines)
+  const excess = Math.max(0, commentLines - 0.5 * codeLines - 3)
   const parts: string[] = []
   if (restating) parts.push(`${plural(restating, 'comment')} restating the code beneath`)
   if (excess > 0) parts.push(`${commentLines} comment lines for ${codeLines} code lines`)

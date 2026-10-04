@@ -1,6 +1,6 @@
 # Slop-O-Meter build plan
 
-Vision: `slop-o-meter.md`. This file is the working plan against the real mod API (Claude Code 2.1.286).
+Vision: `docs/vision.md`. This file is the working plan against the real mod API (Claude Code 2.1.286).
 
 ## Decisions
 
@@ -31,4 +31,4 @@ Vision: `slop-o-meter.md`. This file is the working plan against the real mod AP
 3. [x] Gauge: SVG gauge + needle animation, terminal raster gauge, text fallback, mud crossing.
 4. [x] Metrics: lexer → complexity, abstractions, amplification, type weakening, deps, duplication, comments, test modifier.
 5. [x] Dogfood: the eight experiments in DOGFOOD.md; calibrate `k` values and weights.
-6. [ ] Polish: README (trust section), CI (bun test, tsc, `claude plugin validate --strict`), CONTRIBUTING, CHANGELOG, marketplace.json.
+6. [x] Polish: README (trust section), CI (bun test, tsc, `claude plugin validate --strict`), CONTRIBUTING, CHANGELOG, marketplace.json.
