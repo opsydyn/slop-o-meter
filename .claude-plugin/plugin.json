@@ -1,0 +1,9 @@
+{
+  "name": "slop-o-meter",
+  "version": "0.1.0",
+  "description": "Metrics-driven detection of AI-generated code slop for Claude Code",
+  "author": { "name": "Alan Currie" },
+  "license": "MIT",
+  "keywords": ["metrics", "code-quality", "complexity", "mod"],
+  "types": "./types/index.d.ts"
+}
