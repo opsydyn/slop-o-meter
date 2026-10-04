@@ -3,11 +3,11 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { diffTrees, findRepo, snapshot, type Run } from '../src/git.ts'
+import { diffTrees, findRepo, readFiles, snapshot, type Run } from '../src/git.ts'
 
 let dir: string
 const run: Run = async (argv, init) => {
-  const p = Bun.spawnSync(argv, { cwd: dir, env: { ...process.env, ...init?.env } })
+  const p = Bun.spawnSync(argv, { cwd: dir, env: { ...process.env, ...init?.env }, stdin: init?.stdin === undefined ? undefined : Buffer.from(init.stdin) })
   return { exitCode: p.exitCode, stdout: p.stdout.toString() }
 }
 const write = (path: string, text: string) => {
@@ -69,5 +69,19 @@ describe('turn baseline', () => {
     rmSync(join(dir, 'tmp.ts'))
     const after = (await snapshot(run, repo))!
     expect(await diffTrees(run, repo, before, after)).toEqual([])
+  })
+})
+
+describe('readFiles', () => {
+  test('reads each side of the turn, null where a file did not exist', async () => {
+    write('a.ts', 'héllo ✓\nline 2\n')
+    const repo = (await findRepo(run))!
+    const before = (await snapshot(run, repo))!
+    write('b.ts', 'new\n')
+    const after = (await snapshot(run, repo))!
+    const old = await readFiles(run, repo, before, ['a.ts', 'b.ts'])
+    expect(old.get('a.ts')).toBe('héllo ✓\nline 2\n')
+    expect(old.get('b.ts')).toBeNull()
+    expect((await readFiles(run, repo, after, ['b.ts'])).get('b.ts')).toBe('new\n')
   })
 })

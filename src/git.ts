@@ -7,7 +7,7 @@ import type { SlopFileChange as FileChange } from '../types/index.d.ts'
 
 export type Run = (
   argv: string[],
-  init?: { env?: Record<string, string> },
+  init?: { env?: Record<string, string>; stdin?: string },
 ) => Promise<{ exitCode: number; stdout: string }>
 
 export type Repo = { root: string; gitDir: string }
@@ -44,4 +44,35 @@ export async function diffTrees(run: Run, repo: Repo, before: string, after: str
       // Binary files report '-': count them as one changed line each way.
       return { path: path!, added: added === '-' ? 1 : Number(added), deleted: deleted === '-' ? 1 : Number(deleted) }
     })
+}
+
+/**
+ * Reads files as they stand in a tree, in one `git cat-file --batch`; a path
+ * missing from the tree reads as null.
+ */
+export async function readFiles(run: Run, repo: Repo, tree: string, paths: string[]): Promise<Map<string, string | null>> {
+  const out = new Map<string, string | null>()
+  if (paths.length === 0) return out
+  const r = await run(['git', '-C', repo.root, 'cat-file', '--batch'], {
+    stdin: paths.map(p => `${tree}:${p}`).join('\n') + '\n',
+  })
+  if (r.exitCode !== 0) return out
+  // Sizes are in bytes, so walk the output as bytes.
+  const bytes = new TextEncoder().encode(r.stdout)
+  const decoder = new TextDecoder()
+  let at = 0
+  for (const path of paths) {
+    const eol = bytes.indexOf(10, at)
+    if (eol < 0) break
+    const header = decoder.decode(bytes.subarray(at, eol))
+    at = eol + 1
+    const size = /^\S+ blob (\d+)$/.exec(header)?.[1]
+    if (size === undefined) {
+      out.set(path, null)
+      continue
+    }
+    out.set(path, decoder.decode(bytes.subarray(at, at + Number(size))))
+    at += Number(size) + 1
+  }
+  return out
 }

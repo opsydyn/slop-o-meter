@@ -86,17 +86,28 @@ describe('churn', () => {
 })
 
 describe('combine', () => {
+  const metric = (key: string, normalized: number | null, weight = 15) =>
+    ({ key, label: key, weight, normalized, contribution: 0, raw: {}, reason: '' })
+
   test('unavailable metrics neither add nor dilute', () => {
-    const s = combine([
-      { key: 'a', label: 'a', weight: 15, normalized: 0.5, contribution: 0, raw: {}, reason: '' },
-      { key: 'b', label: 'b', weight: 15, normalized: null, contribution: 0, raw: {}, reason: '' },
-    ])
-    expect(s.score).toBe(50)
+    expect(combine([metric('a', 0.5), metric('b', null)]).score).toBe(combine([metric('a', 0.5)]).score)
+  })
+
+  test('agreeing signals outweigh either alone', () => {
+    const one = combine([metric('a', 1), metric('b', 0)]).score
+    const both = combine([metric('a', 1), metric('b', 1)]).score
+    expect(both).toBeGreaterThan(one)
+    expect(both).toBeLessThan(2 * one)
+  })
+
+  test('contributions add up to the score', () => {
+    const s = combine([metric('a', 0.8), metric('b', 0.3), metric('c', -0.4, 5)])
+    expect(Math.round(s.components.reduce((n, c) => n + c.contribution, 0))).toBe(s.score)
   })
 
   test('score is clamped to 0..100', () => {
-    const s = combine([{ key: 'a', label: 'a', weight: 15, normalized: 7, contribution: 0, raw: {}, reason: '' }])
-    expect(s.score).toBe(100)
+    expect(combine(Array.from({ length: 20 }, (_, i) => metric(`m${i}`, 1))).score).toBeLessThanOrEqual(100)
+    expect(combine([metric('a', -0.5)]).score).toBe(0)
   })
 })
 

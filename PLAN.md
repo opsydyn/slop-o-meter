@@ -12,8 +12,10 @@ Vision: `slop-o-meter.md`. This file is the working plan against the real mod AP
   the final net diff it gives edit survival. Edits made through Bash are invisible to churn (documented limitation).
 - **Analysis without Node**: the mod runtime has no Node and no npm imports, so language analysis will be a
   small real lexer (strings, comments, templates, regex, brace nesting), not a TS compiler.
-- **Normalisation**: each raw metric → `saturate(x, k) = 1 − e^(−x/k)`; metrics that cannot be computed are
-  excluded and the remaining weights rescaled (never zeroed, never invented).
+- **Normalisation**: each raw metric → `saturate(x, k) = 1 − e^(−x/k)`, below zero (to −0.5) only for
+  reductions. Metrics combine as independent evidence, `1 − Π(1 − weight·2.5·n)`, split back proportionally
+  so contributions sum to the score; unavailable metrics add no evidence (never zeroed, never invented).
+  Tests are a weightless modifier, −8..+6 points. See DOGFOOD.md for why.
 - **Avoid triple counting**: surface = spread; abstractions = new symbols (single-consumer weighted);
   amplification = machinery per unit of behaviour added.
 - **Gauge animation**: desktop `Svg` with `isInteractive` + SMIL `animateTransform` from previous to new
@@ -26,6 +28,6 @@ Vision: `slop-o-meter.md`. This file is the working plan against the real mod AP
 1. [x] Boot: manifest, `/slop`, AbovePrompt band, validates.
 2. [x] Vertical slice: baseline, diff, surface + churn, score + explanation, history. → dogfood next.
 3. [x] Gauge: SVG gauge + needle animation, terminal raster gauge, text fallback, mud crossing.
-4. [ ] Metrics: lexer → complexity, abstractions, amplification, type weakening, deps, duplication, comments, test modifier.
+4. [x] Metrics: lexer → complexity, abstractions, amplification, type weakening, deps, duplication, comments, test modifier.
 5. [ ] Dogfood: the eight experiments in DOGFOOD.md; calibrate `k` values and weights.
 6. [ ] Polish: README (trust section), CI (bun test, tsc, `claude plugin validate --strict`), CONTRIBUTING, CHANGELOG, marketplace.json.

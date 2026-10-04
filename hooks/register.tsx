@@ -2,8 +2,9 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import { crossedIntoMud, colorOf, gaugeCells, gaugeSvg, sweep } from '../src/gauge.ts'
-import { diffTrees, findRepo, snapshot, type Repo, type Run } from '../src/git.ts'
-import { explain, lineDiff, scoreTurn, type Scored } from '../src/score.ts'
+import { diffTrees, findRepo, readFiles, snapshot, type Repo, type Run } from '../src/git.ts'
+import { ANALYZABLE } from '../src/analyze.ts'
+import { explain, lineDiff, scoreTurn, type FileVersion, type Scored } from '../src/score.ts'
 import type { SlopRecord } from '../types/index.d.ts'
 
 const PANE = 'slop'
@@ -21,7 +22,7 @@ let rasterColumns: number | null = null
 
 function runner($: EngineInterface): Run {
   return async (argv, init) => {
-    const r = await $.process.run(argv, { env: init?.env, timeoutMs: 20_000 })
+    const r = await $.process.run(argv, { env: init?.env, stdin: init?.stdin, timeoutMs: 20_000 })
     return { exitCode: r.exitCode, stdout: r.stdout }
   }
 }
@@ -47,6 +48,18 @@ function animateRaster($: EngineInterface, record: SlopRecord) {
       'deny' in (await $.ui.blit({ requestId: PANE, key: GAUGE, cells, columns, rows: 2 }))
     if (done || i >= frames.length) timer.cancel()
   })
+}
+
+/** Changed source files and manifests, both sides, skipping anything huge. */
+async function readVersions(run: Run, r: Repo, before: string, after: string, changes: SlopRecord['changes']): Promise<FileVersion[]> {
+  const paths = changes
+    .filter(c => (ANALYZABLE.test(c.path) || /(^|\/)package\.json$/.test(c.path)) && c.added + c.deleted < 5000)
+    .slice(0, 60)
+    .map(c => c.path)
+  const [old, now] = await Promise.all([readFiles(run, r, before, paths), readFiles(run, r, after, paths)])
+  return paths
+    .map(path => ({ path, before: old.get(path) ?? null, after: now.get(path) ?? null }))
+    .filter(f => (f.before?.length ?? 0) < 400_000 && (f.after?.length ?? 0) < 400_000)
 }
 
 const storeKey = (r: Repo) => `history:${r.root}`
@@ -107,7 +120,8 @@ export const register: Register = (on, options) => {
     const changes = await diffTrees(run, r, t.baseline, final)
     if (changes.length === 0 && Object.keys(t.edits).length === 0) return next(e)
 
-    const scored = scoreTurn({ changes, edits: t.edits })
+    const files = await readVersions(run, r, t.baseline, final, changes)
+    const scored = scoreTurn({ changes, edits: t.edits, files })
     const previous = await read($, last)
     const record = toRecord(scored, changes, previous)
     const all = [...(await read($, history)), record].slice(-HISTORY_LIMIT)
@@ -211,7 +225,7 @@ export const register: Register = (on, options) => {
         {ranked.map(c => (
           <Text wrap="truncate-end">
             <Text color={c.normalized === null ? undefined : colorOf(c.normalized * 100)}>
-              {c.normalized === null ? '   –' : `+${Math.round(c.contribution)}`.padStart(4)}
+              {c.normalized === null ? '   –' : signedPoints(c.contribution).padStart(4)}
             </Text>
             {'  '}{c.label}<Text dimColor>  {c.normalized === null ? 'unavailable' : c.reason}</Text>
           </Text>
@@ -251,6 +265,11 @@ function bar(score: number, width: number): string {
 
 function spark(scores: number[]): string {
   return scores.map(s => '▁▂▃▄▅▆▇█'[Math.min(7, Math.floor(s / 12.5))]).join('')
+}
+
+function signedPoints(points: number): string {
+  const n = Math.round(points)
+  return n > 0 ? `+${n}` : String(n)
 }
 
 function trend(delta: number | null): string {
