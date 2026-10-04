@@ -206,7 +206,8 @@ function onWord(f: Facts, code: Token[], k: number, w: Walk) {
   }
   if (word === 'case') f.branches++
   if (w.stack.length === 0) {
-    if (word === 'import' || word === 'export') w.inModuleClause = true
+    // `as` renames inside import/export lists and `* as ns`; it casts everywhere else.
+    if (word === 'import' || (word === 'export' && ['{', '*', 'type'].includes(next))) w.inModuleClause = true
     if (word === 'import' && next !== '(') f.imports++
     declare(f, code, k)
   }
@@ -256,6 +257,7 @@ function onPunct(f: Facts, code: Token[], k: number, w: Walk) {
     }
     case '}': {
       const open = w.stack.pop()
+      if (w.stack.length === 0) w.inModuleClause = false
       if (open?.kind === 'function' && t) f.functionLengths.push(t.line - open.line + 1)
     }
   }
@@ -263,16 +265,15 @@ function onPunct(f: Facts, code: Token[], k: number, w: Walk) {
 
 /** Suppressions, doc blocks, and comments that only restate the line beneath them. */
 function readComments(f: Facts, comments: Token[], code: Token[]) {
-  const byLine = new Map<number, Token[]>()
-  for (const t of code) byLine.set(t.line, [...(byLine.get(t.line) ?? []), t])
+  const lines = byLine(code)
   for (const c of comments) {
-    const lines = c.text.split('\n').length
-    f.commentLines += lines
+    const span = c.text.split('\n').length
+    f.commentLines += span
     if (/@ts-(ignore|expect-error|nocheck)|eslint-disable/.test(c.text)) f.suppressions++
     if (c.text.startsWith('/**')) f.docBlocks++
-    if (byLine.has(c.line)) continue
+    if (lines.has(c.line)) continue
     const said = words(c.text.replace(/^\/[/*]+|\*+\/$|^\s*\*/gm, ''))
-    const codeWords = new Set((byLine.get(c.line + lines) ?? []).flatMap(t =>
+    const codeWords = new Set((lines.get(c.line + span) ?? []).flatMap(t =>
       t.kind === 'word' ? words(t.text) : SPOKEN[t.text] ?? []))
     const echoed = said.filter(w => codeWords.has(w))
     if (said.length > 0 && said.length <= 8 && echoed.length / said.length >= 0.6) f.restating++
@@ -281,13 +282,39 @@ function readComments(f: Facts, comments: Token[], code: Token[]) {
 
 /** Each substantial code line with names and literals erased, imports skipped. */
 function shapesOf(code: Token[]): string[] {
+  return [...byLine(code).values()]
+    .filter(tokens => tokens.length >= 5 && tokens[0]?.text !== 'import' && !tokens.some(t => t.text === 'from'))
+    .map(shapeOf)
+}
+
+function byLine(code: Token[]): Map<number, Token[]> {
   const lines = new Map<number, Token[]>()
   for (const t of code) lines.set(t.line, [...(lines.get(t.line) ?? []), t])
-  return [...lines.values()]
-    .filter(tokens => tokens.length >= 5 && tokens[0]?.text !== 'import' && !tokens.some(t => t.text === 'from'))
-    .map(tokens => tokens.map(t =>
-      t.kind === 'word' && !KEYWORDS.has(t.text) ? 'i' : t.kind === 'num' ? '0' : t.kind === 'str' ? '"' : t.text,
-    ).join(' '))
+  return lines
+}
+
+const shapeOf = (tokens: Token[]) => tokens.map(t =>
+  t.kind === 'word' && !KEYWORDS.has(t.text) ? 'i' : t.kind === 'num' ? '0' : t.kind === 'str' ? '"' : t.text,
+).join(' ')
+
+/**
+ * The shape of an edit: the lines it removed and added, names and literals
+ * erased. The same rename repeated across files has one shape.
+ */
+export function editShape(before: string, after: string): string {
+  const lines = (src: string) => src.split('\n').map(l => l.trim()).filter(Boolean)
+  const was = lines(before)
+  const now = lines(after)
+  const minus = (a: string[], b: string[]) => {
+    const left = [...b]
+    return a.filter(l => {
+      const at = left.indexOf(l)
+      if (at >= 0) left.splice(at, 1)
+      return at < 0
+    })
+  }
+  const shape = (ls: string[]) => ls.map(l => shapeOf(lex(l).filter(t => t.kind !== 'comment'))).sort().join('\n')
+  return `${shape(minus(was, now))}\n→\n${shape(minus(now, was))}`
 }
 
 function declare(f: Facts, code: Token[], k: number) {

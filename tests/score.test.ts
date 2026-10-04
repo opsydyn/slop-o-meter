@@ -51,6 +51,23 @@ describe('surface', () => {
     expect(s.normalized).toBe(0)
   })
 
+  test('files that only lost lines do not spread a change', () => {
+    const s = surface([change('src/a.ts', 3), change('src/old/x.ts', 0, 40), change('src/old/y.ts', 0, 30)])
+    expect(s.raw.files).toBe(1)
+    expect(s.normalized!).toBeLessThan(0.05)
+  })
+
+  test('the same edit repeated across files counts once', () => {
+    const before = (name: string) => `import { log } from '../log'\nlog('${name} ' + id)\n`
+    const after = (name: string) => `import { logEvent } from '../log'\nlogEvent('${name}', { id })\n`
+    const paths = ['src/a/x.ts', 'src/b/y.ts', 'src/c/z.ts', 'src/d/w.ts']
+    const s = surface(paths.map(p => change(p, 2, 2)),
+      paths.map(p => ({ path: p, before: before(p), after: after(p) })))
+    expect(s.raw.distinctChanges).toBe(1)
+    expect(s.raw.repeated).toBe(3)
+    expect(s.normalized!).toBeLessThan(surface(paths.map(p => change(p, 2, 2))).normalized!)
+  })
+
   test('raw size alone does not dominate', () => {
     const big = surface([change('src/a.ts', 2000, 1500)])
     expect(big.normalized!).toBeLessThan(0.3)

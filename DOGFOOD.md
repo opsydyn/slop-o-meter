@@ -3,6 +3,45 @@
 Slop-O-Meter builds Slop-O-Meter while Slop-O-Meter watches. Each entry records what we expected,
 what the meter said, where it was wrong, and what we changed. Scores here are real outputs, not targets.
 
+## Live experiments (session 1, branch `dogfood/lab`, since deleted)
+
+Each experiment was one real turn of a Claude Code session with the mod loaded, against a copy of the
+shop fixture inside this repository, with nothing else in the turn's diff. "Live" is what the meter
+recorded at the time; "now" is the same change scored by the calibrated code (fixtures marked †).
+
+| # | Experiment | Expected | Live | Now |
+|---|---|---|---|---|
+| 1 | tiny direct `/search` route, with uncommitted user work in the tree | low; user work not attributed | 0 CLEAN; only `routes.ts +4` attributed | 0 |
+| 2 | `/items/count` behind interface, repository, service, wrapper, adapter, factory | high | 23* / 70 offline | 75 HEAVY SLOP † |
+| 3 | collapse experiment 2 to one line | far below 2 | 23* / 3 offline | 0 † |
+| 4 | price formatter written 3 ways, file abandoned, 3 lines kept | small diff, high churn | 15 CLEAN | 27 MILD SLOP † |
+| 5 | one-condition fix in a nested, `any`-typed legacy function | low | 0 CLEAN | 0 |
+| 6a | refund rules, untested | low | 4 CLEAN | 4 † |
+| 6b | the same rules with 4 behavioural tests | below 6a, bounded | 0 CLEAN (tests −8) | 0 † |
+| 7 | `log()` → structured `logEvent()` across 19 files | large diff, not mud | 29 MILD SLOP | 8 CLEAN † |
+
+\* Experiments 2 and 3 ran on step-2 code (surface and churn only); see the hot-reload finding below.
+
+**Findings and changes**
+
+- **Hot reload through a symlink never happened.** The session's dev-mods entry was a symlink to this
+  repository; the engine never saw edits made through it, so steps 3 and 4 ran only in tests and offline
+  until experiment 3. The live setup turn scored 84 BIG BALL OF MUD from surface alone, which only the old
+  weighted-average code could produce: that is how we noticed. The dev-mods entry is now a real copy of the
+  plugin files, synced from the repository (CONTRIBUTING.md).
+- **The lexer ignored every `as` after a top-level `export`** (experiment 2's `as unknown as number` went
+  unseen). The module-clause flag now applies only to import/export lists and resets when they close.
+- **Deleting files counted as change surface** (experiment 3: six deleted files scored +17). Surface now
+  counts only files that gained lines, and deleted lines at a quarter weight.
+- **A mechanical rename counted as 19 independent changes** (experiment 7: 29). Files whose edits have the
+  same shape (lines removed and added, names and literals erased) now count once: 29 → 8.
+- **Churn read too gently** (experiment 4: 97% of the work thrown away and a file abandoned scored 15
+  CLEAN). Churn now saturates at 80 wasted lines instead of 200: 15 → 27 MILD SLOP.
+- **Tests and tiny changes:** with a 4-point structural score the −8 test modifier clamps to 0, so 6a/6b
+  differ by 4. The ordering holds; the modifier shows in the breakdown even when the total is clamped.
+- **Correctness is out of scope:** writing 6b's tests showed the `paid === 0 && !isAdmin` rule is
+  unreachable. No structural metric can see that, and none should pretend to.
+
 ## Fixture scenarios (`tests/fixtures/scenarios.ts`)
 
 The same request, "add a search endpoint", implemented several ways, plus the other experiments from
@@ -13,13 +52,17 @@ the tests assert ordering only.
 |---|---|---|---|
 | direct: one function, one route | 1 tiny direct change | low | 3 CLEAN |
 | normal: a small search module | — | low, above direct | 5 CLEAN |
-| overEngineered: interface, repository, factory, service, adapter, builder, config | 2 over-engineering | high | 73 HEAVY SLOP |
-| simplification: overEngineered collapsed to direct | 4 simplification | far below 73 | 3 CLEAN |
-| largeRefactor: one logger reshaped across 19 files | 3 large legitimate change | not mud | 29 MILD SLOP |
+| overEngineered: interface, repository, factory, service, adapter, builder, config | 2 over-engineering | high | 76 HEAVY SLOP |
+| countOverEngineered: live experiment 2 | 2 over-engineering | high | 75 HEAVY SLOP |
+| simplification: overEngineered collapsed to direct | 4 simplification | far below 76 | 0 CLEAN |
+| churnRewrites: live experiment 4 | 5 churn | small diff, churn shows | 27 MILD SLOP |
+| largeRefactor: one logger reshaped across 19 files | 3 large legitimate change | not mud | 8 CLEAN |
 | legacyFix: a one-line fix inside a nested, `any`-typed legacy function | 6 ugly legacy | low | 0 CLEAN |
 | untestedRisk / testedRisk: refund rules with and without 4 tests | 7 test effect | tested lower, by a bounded amount | 4 / 0 |
-| weakTyping: direct, but `any`, casts, `@ts-ignore` | — | above direct | 23 MILD SLOP |
+| weakTyping: direct, but `any`, casts, `@ts-ignore` | — | above direct | 26 MILD SLOP |
 | needlessDependency: direct, plus lodash and fuse.js | — | above direct | 18 CLEAN |
+
+(Scores after the session-1 calibration; the history of each change is below.)
 
 **Breakdown of overEngineered (73):** abstractions +25 (7 new abstractions, 3 with a single consumer,
 7 pattern-named), amplification +25 (≈15 units of machinery for ~4 units of behaviour), surface +11,
@@ -31,8 +74,8 @@ comments +7 (doc blocks that only restate class names), type weakening +4 (`as a
   only 44: abstractions and amplification were both maxed, but quiet metrics diluted them. Metrics now
   combine as independent evidence, `1 − Π(1 − sᵢ)`, split back proportionally so contributions still sum
   to the score. Unavailable metrics simply contribute no evidence.
-- *Known soft spot:* largeRefactor (29) is entirely change surface (19 files). Coherent wide changes are
-  penalised a little; we will revisit when a real large refactor happens here.
+- *Was a soft spot:* largeRefactor scored 29, entirely change surface (19 files). Fixed by grouping
+  identical edits (see live experiment 7).
 - *Known soft spot:* the test modifier (−8) can take a small risky change to 0. Bounded, as intended,
   but a turn with tests and genuine slop still shows the slop (tests never exceed −8).
 

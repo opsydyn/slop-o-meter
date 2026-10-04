@@ -2,7 +2,12 @@
 // Each is a plausible piece of agent output for the same small request,
 // "add a search endpoint", unless named otherwise.
 
-export type Scenario = { before: Record<string, string>; after: Record<string, string> }
+export type Scenario = {
+  before: Record<string, string>
+  after: Record<string, string>
+  /** The agent's edit-tool activity, where it matters; otherwise one clean pass. */
+  edits?: Record<string, { ops: number; added: number; deleted: number }>
+}
 
 const ROUTES = `import { listItems } from './items'
 
@@ -272,5 +277,123 @@ export const needlessDependency: Scenario = {
   after: {
     ...direct.after,
     'package.json': '{ "name": "app", "dependencies": { "lodash": "^4.17.21", "fuse.js": "^7.0.0" } }',
+  },
+}
+
+/**
+ * Live experiment 4: a price formatter written three ways in a new file (a full
+ * rewrite each time), the file abandoned, and three lines kept. Edit volume as
+ * the live meter recorded it.
+ */
+export const churnRewrites: Scenario = {
+  before: base,
+  after: {
+    ...base,
+    'src/items.ts': ITEMS + `
+export const formatPrice = (pence: number) =>
+  new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(pence / 100)
+`,
+  },
+  edits: {
+    'src/money.ts': { ops: 3, added: 75, deleted: 27 },
+    'src/items.ts': { ops: 1, added: 3, deleted: 0 },
+  },
+}
+
+/** Live experiment 2: a count endpoint behind six pattern-named classes. */
+export const countOverEngineered: Scenario = {
+  before: base,
+  after: {
+    ...base,
+    'src/routes.ts': ROUTES
+      .replace("import { listItems } from './items'", "import { listItems } from './items'\nimport { ItemCountAdapterFactory } from './count/ItemCountAdapterFactory'")
+      .replace("  return { status: 404 }", "  if (path === '/items/count') return ItemCountAdapterFactory.create().handle()\n  return { status: 404 }"),
+    'src/count/IItemCountRepository.ts': `import type { Item } from '../items'
+
+/**
+ * Repository abstraction for counting items.
+ */
+export interface IItemCountRepository {
+  /** Counts the items. */
+  countItems(): number
+  /** Gets all items. */
+  getAll(): Item[]
+}
+`,
+    'src/count/InMemoryItemCountRepository.ts': `import { listItems, type Item } from '../items'
+import type { IItemCountRepository } from './IItemCountRepository'
+
+/**
+ * In-memory implementation of the item count repository.
+ */
+export class InMemoryItemCountRepository implements IItemCountRepository {
+  // count the items
+  countItems(): number {
+    // return the length
+    return this.getAll().length
+  }
+
+  // get all items
+  getAll(): Item[] {
+    return listItems()
+  }
+}
+`,
+    'src/count/ItemCountService.ts': `import type { IItemCountRepository } from './IItemCountRepository'
+
+/**
+ * Service for item counting business logic.
+ */
+export class ItemCountService {
+  constructor(private readonly repository: IItemCountRepository) {}
+
+  /** Gets the item count. */
+  getItemCount(): number {
+    const count = this.repository.countItems()
+    return count as unknown as number
+  }
+}
+`,
+    'src/count/ItemCountResponseWrapper.ts': `/**
+ * Wraps item count responses.
+ */
+export class ItemCountResponseWrapper {
+  constructor(private readonly count: number) {}
+
+  /** Wraps the count. */
+  wrap(): { count: number } {
+    return { count: this.count }
+  }
+}
+`,
+    'src/count/ItemCountAdapter.ts': `import type { ItemCountService } from './ItemCountService'
+import { ItemCountResponseWrapper } from './ItemCountResponseWrapper'
+
+/**
+ * Adapts HTTP requests to the item count service.
+ */
+export class ItemCountAdapter {
+  constructor(private readonly service: ItemCountService) {}
+
+  // handle the request
+  handle(): { count: number } {
+    return new ItemCountResponseWrapper(this.service.getItemCount()).wrap()
+  }
+}
+`,
+    'src/count/ItemCountAdapterFactory.ts': `import { InMemoryItemCountRepository } from './InMemoryItemCountRepository'
+import { ItemCountAdapter } from './ItemCountAdapter'
+import { ItemCountService } from './ItemCountService'
+
+/**
+ * Factory creating item count adapters.
+ */
+export class ItemCountAdapterFactory {
+  /** Creates an adapter. */
+  static create(): ItemCountAdapter {
+    return new ItemCountAdapter(new ItemCountService(new InMemoryItemCountRepository()))
+  }
+}
+`,
   },
 }

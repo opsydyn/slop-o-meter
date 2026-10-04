@@ -3,14 +3,14 @@ import { describe, expect, test } from 'bun:test'
 import { lineDiff, scoreTurn, type Scored } from '../src/score.ts'
 import * as S from './fixtures/scenarios.ts'
 
-/** Scores a scenario as if an agent wrote it in one clean pass (no churn). */
-function score({ before, after }: S.Scenario): Scored {
+/** Scores a scenario with its recorded edit activity, or as one clean pass (no churn). */
+function score({ before, after, edits: activity }: S.Scenario): Scored {
   const paths = [...new Set([...Object.keys(before), ...Object.keys(after)])]
   const files = paths
     .map(path => ({ path, before: before[path] ?? null, after: after[path] ?? null }))
     .filter(f => f.before !== f.after)
   const changes = files.map(f => ({ path: f.path, ...lineDiff(f.before ?? '', f.after ?? '') }))
-  const edits = Object.fromEntries(changes.map(c => [c.path, { ops: 1, added: c.added, deleted: c.deleted }]))
+  const edits = activity ?? Object.fromEntries(changes.map(c => [c.path, { ops: 1, added: c.added, deleted: c.deleted }]))
   return scoreTurn({ changes, edits, files })
 }
 
@@ -54,6 +54,12 @@ describe('ordering', () => {
 
   test('a minimal fix in legacy code is not punished for the legacy', () => {
     expect(of('legacyFix')).toBeLessThanOrEqual(20)
+  })
+
+  test('the live count experiment is heavy, and churn alone shows rewrites', () => {
+    expect(of('countOverEngineered')).toBeGreaterThan(60)
+    expect(part('churnRewrites', 'churn')).toBeGreaterThan(part('direct', 'churn'))
+    expect(scores.churnRewrites!.state).not.toBe('CLEAN')
   })
 
   test('tests reduce the risk of the same change, but only a little', () => {

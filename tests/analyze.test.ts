@@ -81,6 +81,20 @@ const s = a !== b
     expect(f.nonNull).toBe(1)
   })
 
+  test('casts after an exported declaration still count', () => {
+    const f = analyze(`
+import type { A } from './a'
+export { x as y }
+export class Service {
+  get(): number {
+    return this.count as unknown as number
+  }
+}
+`)
+    expect(f.casts).toBe(2)
+    expect(f.doubleCasts).toBe(1)
+  })
+
   test('restating comments, not useful ones', () => {
     const f = analyze(`
 // increment the counter

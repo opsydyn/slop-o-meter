@@ -7,7 +7,7 @@ import type {
   SlopFileChange as FileChange,
   SlopState as State,
 } from '../types/index.d.ts'
-import { analyze, ANALYZABLE, type Declaration, type Facts } from './analyze.ts'
+import { analyze, ANALYZABLE, editShape, type Declaration, type Facts } from './analyze.ts'
 
 /** A changed file's text before and after the turn; null where it did not exist. */
 export type FileVersion = { path: string; before: string | null; after: string | null }
@@ -59,17 +59,33 @@ export const isProduction = (path: string) =>
 const dirOf = (path: string) => path.split('/').slice(0, -1).join('/') || '.'
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
-export function surface(changes: FileChange[]): Component {
-  const prod = changes.filter(c => isProduction(c.path))
-  const files = prod.length
-  const dirs = new Set(prod.map(c => dirOf(c.path))).size
-  const lines = prod.reduce((n, c) => n + c.added + c.deleted, 0)
+/**
+ * How widely the change spreads. Files that only lost lines do not spread it,
+ * and files that received the same edit (a rename, a signature change) count
+ * as one change, however many there are.
+ */
+export function surface(changes: FileChange[], files: FileVersion[] = []): Component {
+  const content = new Map(files.map(f => [f.path, f]))
+  const grown = changes.filter(c => isProduction(c.path) && c.added > 0)
+  const groups = new Map<string, FileChange[]>()
+  for (const c of grown) {
+    const f = content.get(c.path)
+    const shape = f?.before && f.after ? editShape(f.before, f.after) : c.path
+    groups.set(shape, [...(groups.get(shape) ?? []), c])
+  }
+  const distinct = [...groups.values()].map(group => group[0]!)
+  const repeated = grown.length - distinct.length
+  const filesN = distinct.length
+  const dirs = new Set(distinct.map(c => dirOf(c.path))).size
+  const lines = changes.filter(c => isProduction(c.path)).reduce((n, c) => n + c.added + 0.25 * c.deleted, 0)
   const normalized =
-    0.45 * saturate(files - 1, 5) + 0.35 * saturate(dirs - 1, 3) + 0.2 * saturate(lines, 400)
-  return component('surface', 'change surface', normalized, { files, dirs, lines },
-    files === 0
-      ? 'no production code changed'
-      : `${plural(files, 'production file')} across ${dirs} director${dirs === 1 ? 'y' : 'ies'}, ${lines} lines`)
+    0.45 * saturate(filesN - 1, 5) + 0.35 * saturate(dirs - 1, 3) + 0.2 * saturate(lines, 400)
+  const spread = new Set(grown.map(c => dirOf(c.path))).size
+  const parts = [`${plural(grown.length, 'production file')} grew across ${spread} director${spread === 1 ? 'y' : 'ies'}, ${Math.round(lines)} lines`]
+  if (repeated > 0) parts.push(`${repeated} repeat the same edit`)
+  return component('surface', 'change surface', normalized,
+    { files: grown.length, distinctChanges: filesN, dirs, lines: Math.round(lines), repeated },
+    grown.length === 0 ? 'no production code added' : parts.join('; '))
 }
 
 /**
@@ -89,7 +105,7 @@ export function churn(changes: FileChange[], edits: EditActivity): Component {
   const survival = 1 - wasted / volume
   const abandoned = files.filter(([path]) => !finalOf.has(path)).length
   const rewritten = files.filter(([, e]) => e.ops >= 6).length
-  const normalized = saturate(wasted, 200) * Math.sqrt(1 - survival)
+  const normalized = saturate(wasted, 80) * Math.sqrt(1 - survival)
   const parts = [`${Math.round((1 - survival) * 100)}% of ${volume} edited lines did not survive`]
   if (abandoned) parts.push(`${plural(abandoned, 'file')} edited then reverted or deleted`)
   if (rewritten) parts.push(`${plural(rewritten, 'file')} edited 6+ times`)
@@ -150,7 +166,7 @@ export function scoreTurn({ changes, edits, files = [] }: TurnInput): Scored {
   // Language metrics are unavailable when production code changed but none of it could be read.
   const measurable = !prodChanged || code.some(p => !p.isTest)
   return combine([
-    surface(changes),
+    surface(changes, files),
     churn(changes, edits),
     complexity(code, measurable),
     abstractions(code, measurable),
@@ -266,7 +282,8 @@ export function abstractions(code: Pair[], measurable: boolean): Component {
   if (newModules) parts.push(plural(newModules, 'new module'))
   if (singleUse.length) parts.push(`${singleUse.length} with a single consumer (${names(singleUse)})`)
   if (patterned.length) parts.push(`${patterned.length} pattern-named`)
-  if (shrunk) parts.push(`${plural(removed.length + goneModules, 'abstraction')} removed`)
+  if (removed.length) parts.push(`${plural(removed.length, 'abstraction')} removed`)
+  if (goneModules) parts.push(`${plural(goneModules, 'module')} deleted`)
   return component('abstractions', 'abstraction growth', measurable ? normalized : null,
     { added: added.length, singleUse: singleUse.length, patternNamed: patterned.length, newModules, removed: removed.length + goneModules, perBehaviour: round(perBehaviour) },
     parts.join(', ') || 'no new abstractions')
@@ -286,7 +303,7 @@ export function amplification(code: Pair[], measurable: boolean): Component {
   return component('amplification', 'change amplification', measurable ? normalized : null,
     { machinery: round(machinery), behaviour: round(behaviour), ratio: round(ratio), imports },
     machinery < 2
-      ? lessMachinery > 0 ? `removed ${plural(lessMachinery, 'layer')} of machinery` : 'no new machinery'
+      ? lessMachinery > 0 ? `removed ${plural(removed.length, 'abstraction')} and ${plural(goneModules, 'module')}` : 'no new machinery'
       : `${round(machinery)} units of machinery (modules, types, wiring) for ~${Math.round(behaviour)} of behaviour`)
 }
 

@@ -21,7 +21,8 @@ Vision: `slop-o-meter.md`. This file is the working plan against the real mod AP
 - **Gauge animation**: desktop `Svg` with `isInteractive` + SMIL `animateTransform` from previous to new
   angle; terminal `Raster` frames via `$.ui.blit`. No `Client` unless needed.
 - **State**: live values in `$.state` (survive hot reload); history in `$.store` keyed by repo root, 200 turns.
-- **Dev loading**: the repo is symlinked into the session's dev-mods folder; the repo stays canonical.
+- **Dev loading**: the session's dev-mods entry is a real copy of the plugin files, rsynced from the repo
+  (a symlink is never reloaded: see DOGFOOD.md). The repo stays canonical.
 
 ## Steps
 
@@ -29,5 +30,5 @@ Vision: `slop-o-meter.md`. This file is the working plan against the real mod AP
 2. [x] Vertical slice: baseline, diff, surface + churn, score + explanation, history. → dogfood next.
 3. [x] Gauge: SVG gauge + needle animation, terminal raster gauge, text fallback, mud crossing.
 4. [x] Metrics: lexer → complexity, abstractions, amplification, type weakening, deps, duplication, comments, test modifier.
-5. [ ] Dogfood: the eight experiments in DOGFOOD.md; calibrate `k` values and weights.
+5. [x] Dogfood: the eight experiments in DOGFOOD.md; calibrate `k` values and weights.
 6. [ ] Polish: README (trust section), CI (bun test, tsc, `claude plugin validate --strict`), CONTRIBUTING, CHANGELOG, marketplace.json.
