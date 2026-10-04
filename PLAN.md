@@ -25,7 +25,7 @@ Vision: `slop-o-meter.md`. This file is the working plan against the real mod AP
 
 1. [x] Boot: manifest, `/slop`, AbovePrompt band, validates.
 2. [x] Vertical slice: baseline, diff, surface + churn, score + explanation, history. → dogfood next.
-3. [ ] Gauge: SVG gauge + needle animation, terminal raster gauge, text fallback, mud crossing.
+3. [x] Gauge: SVG gauge + needle animation, terminal raster gauge, text fallback, mud crossing.
 4. [ ] Metrics: lexer → complexity, abstractions, amplification, type weakening, deps, duplication, comments, test modifier.
 5. [ ] Dogfood: the eight experiments in DOGFOOD.md; calibrate `k` values and weights.
 6. [ ] Polish: README (trust section), CI (bun test, tsc, `claude plugin validate --strict`), CONTRIBUTING, CHANGELOG, marketplace.json.

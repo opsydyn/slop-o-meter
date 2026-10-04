@@ -2,8 +2,23 @@
   "name": "slop-o-meter",
   "version": "0.1.0",
   "description": "Metrics-driven detection of AI-generated code slop for Claude Code",
-  "author": { "name": "Alan Currie" },
+  "author": {
+    "name": "Alan Currie"
+  },
   "license": "MIT",
-  "keywords": ["metrics", "code-quality", "complexity", "mod"],
-  "types": "./types/index.d.ts"
+  "keywords": [
+    "metrics",
+    "code-quality",
+    "complexity",
+    "mod"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "budget": {
+      "type": "number",
+      "title": "Slop budget",
+      "description": "Advisory score budget per turn. Slop-O-Meter observes; it never blocks edits.",
+      "default": 40
+    }
+  }
 }

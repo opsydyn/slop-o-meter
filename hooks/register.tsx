@@ -1,25 +1,23 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
+import { crossedIntoMud, colorOf, gaugeCells, gaugeSvg, sweep } from '../src/gauge.ts'
 import { diffTrees, findRepo, snapshot, type Repo, type Run } from '../src/git.ts'
 import { explain, lineDiff, scoreTurn, type Scored } from '../src/score.ts'
-import type { SlopRecord, SlopState } from '../types/index.d.ts'
+import type { SlopRecord } from '../types/index.d.ts'
 
 const PANE = 'slop'
+const GAUGE = 'gauge'
 const HISTORY_LIMIT = 200
+/** A result younger than this animates its needle when drawn; older ones draw still. */
+const FRESH_MS = 8000
 const turn = atom({ plugin: 'slop-o-meter', key: 'turn' } as const, null)
 const last = atom({ plugin: 'slop-o-meter', key: 'last' } as const, null)
 const history = atom({ plugin: 'slop-o-meter', key: 'history' } as const, [])
 
-const COLORS: Record<SlopState, string> = {
-  'CLEAN': '#3fb950',
-  'MILD SLOP': '#a3c43a',
-  'GETTING SLOPPY': '#d29922',
-  'HEAVY SLOP': '#f0883e',
-  'BIG BALL OF MUD': '#f85149',
-}
-
 let repo: Repo | null | undefined
+/** Width of the terminal gauge as last drawn, so a sweep can blit the mounted raster. */
+let rasterColumns: number | null = null
 
 function runner($: EngineInterface): Run {
   return async (argv, init) => {
@@ -33,11 +31,31 @@ async function getRepo($: EngineInterface): Promise<Repo | null> {
   return repo
 }
 
+/** Sweeps the terminal needle from the previous score; flashes when crossing into mud. */
+function animateRaster($: EngineInterface, record: SlopRecord) {
+  const columns = rasterColumns
+  if (columns === null || record.delta === null || record.delta === 0) return
+  const previous = record.score - record.delta
+  const crossing = crossedIntoMud(record.score, previous)
+  const frames = sweep(previous, record.score, 9, crossing)
+    .map(s => gaugeCells(s, columns))
+  if (crossing) frames.push(gaugeCells(record.score, columns, true), gaugeCells(record.score, columns))
+  let i = 0
+  const timer = $.clock.every(33, async () => {
+    const cells = frames[i++]
+    const done = !cells ||
+      'deny' in (await $.ui.blit({ requestId: PANE, key: GAUGE, cells, columns, rows: 2 }))
+    if (done || i >= frames.length) timer.cancel()
+  })
+}
+
 const storeKey = (r: Repo) => `history:${r.root}`
 const relative = (r: Repo, path: string) =>
   path.startsWith(`${r.root}/`) ? path.slice(r.root.length + 1) : null
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  const budget = typeof options.budget === 'number' ? options.budget : 40
+
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'slop',
@@ -96,7 +114,8 @@ export const register: Register = on => {
     await update($, history, () => all)
     await update($, last, () => record)
     await $.store.set(storeKey(r), all)
-    if (record.state === 'BIG BALL OF MUD' && previous?.state !== 'BIG BALL OF MUD') {
+    animateRaster($, record)
+    if (crossedIntoMud(record.score, previous?.score ?? null)) {
       $.ui.toast(`⚠ BIG BALL OF MUD: slop score ${record.score}. /slop explain says why.`)
     }
     return next(e)
@@ -121,7 +140,7 @@ export const register: Register = on => {
       return { text: record.changes.map(c => `+${c.added} -${c.deleted}  ${c.path}`).join('\n') || 'No file changes.' }
     }
     if (arg === '') await $.ui.open({ id: PANE, title: 'Slop-O-Meter' })
-    return { text: explain(record) }
+    return { text: `${explain(record)}\n\nbudget ${budget}  ${overBudget(record.score, budget)}` }
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -135,7 +154,7 @@ export const register: Register = on => {
       <Box>
         <Text bold>SLOP </Text>
         {record ? (
-          <Text color={COLORS[record.state]}>
+          <Text color={colorOf(record.score)}>
             {bar(record.score, 12)} {String(record.score).padStart(3)}  {record.state} {trend(record.delta)}
           </Text>
         ) : (
@@ -147,21 +166,68 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text } = $.ui.resolve(e)
     const record = await read($, last)
     const rows = await read($, history)
-    if (!record) return <Text dimColor>No scored turns yet.</Text>
+    const width = e.props.bodyColumns
+    const { Box, Text } = $.ui.resolve(e)
+    if (!record) return <Text dimColor>No scored turns yet. The meter scores each turn that changes code.</Text>
+
+    const color = colorOf(record.score)
+    const ranked = [...record.components].sort((a, b) => b.contribution - a.contribution)
+    let gauge
+    if (e.surface === 'terminal') {
+      const { Raster } = $.ui.resolve(e)
+      const columns = Math.max(10, Math.min(48, width - 2))
+      rasterColumns = columns
+      gauge = (
+        <Box flexDirection="column">
+          <Raster key={GAUGE} columns={columns} rows={2} cells={gaugeCells(record.score, columns)} />
+          <Text color={color} bold>
+            {record.score}/100  {record.state === 'BIG BALL OF MUD' ? '⚠ ' : ''}{record.state} {trend(record.delta)}
+          </Text>
+        </Box>
+      )
+    } else {
+      const { Svg } = $.ui.resolve(e)
+      const animate = Date.now() - record.at < FRESH_MS
+      gauge = (
+        <Svg
+          source={gaugeSvg({ ...record, animate })}
+          alt={`Slop score ${record.score} of 100: ${record.state}`}
+          width={Math.min(320, width * 8)}
+          isInteractive={animate}
+        />
+      )
+    }
+
     return (
       <Box flexDirection="column">
         <Text bold>SLOP-O-METER</Text>
-        <Text color={COLORS[record.state]} bold>
-          {bar(record.score, Math.min(40, e.props.bodyColumns - 8))} {record.score}
-        </Text>
-        <Text color={COLORS[record.state]}>{record.state} {trend(record.delta)}</Text>
+        {gauge}
         <Text> </Text>
-        {explain(record).split('\n').slice(2).map(line => <Text>{line}</Text>)}
+        <Text>budget {budget}  <Text color={record.score > budget ? '#f0883e' : '#3fb950'}>{overBudget(record.score, budget)}</Text></Text>
         <Text> </Text>
-        <Text dimColor>history  {rows.slice(-12).map(h => h.score).join(' → ')}</Text>
+        <Text bold>score breakdown</Text>
+        {ranked.map(c => (
+          <Text wrap="truncate-end">
+            <Text color={c.normalized === null ? undefined : colorOf(c.normalized * 100)}>
+              {c.normalized === null ? '   –' : `+${Math.round(c.contribution)}`.padStart(4)}
+            </Text>
+            {'  '}{c.label}<Text dimColor>  {c.normalized === null ? 'unavailable' : c.reason}</Text>
+          </Text>
+        ))}
+        <Text> </Text>
+        <Text bold>changed files</Text>
+        {record.changes.slice(0, 12).map(c => (
+          <Text wrap="truncate-start" dimColor>
+            <Text color="#3fb950">+{c.added}</Text> <Text color="#f85149">-{c.deleted}</Text>  {c.path}
+          </Text>
+        ))}
+        {record.changes.length > 12 && <Text dimColor>  …{record.changes.length - 12} more</Text>}
+        <Text> </Text>
+        <Text bold>history</Text>
+        <Text>{spark(rows.slice(-Math.max(8, width - 4)).map(h => h.score))}</Text>
+        <Text dimColor>{rows.slice(-6).map(h => h.score).join(' → ')}</Text>
       </Box>
     )
   })
@@ -183,7 +249,15 @@ function bar(score: number, width: number): string {
   return '█'.repeat(filled) + '░'.repeat(Math.max(0, width - filled))
 }
 
+function spark(scores: number[]): string {
+  return scores.map(s => '▁▂▃▄▅▆▇█'[Math.min(7, Math.floor(s / 12.5))]).join('')
+}
+
 function trend(delta: number | null): string {
   if (delta === null || delta === 0) return ''
   return delta > 0 ? `↗ +${delta}` : `↘ ${delta}`
+}
+
+function overBudget(score: number, budget: number): string {
+  return score > budget ? `over by +${score - budget}` : `under by ${budget - score}`
 }
