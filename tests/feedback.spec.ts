@@ -10,8 +10,8 @@ describe('mid-turn nudges', () => {
   test('pattern-named abstractions: quiet for two, one nudge at the third, never repeated', () => {
     let t = turn()
     const write = (path: string, name: string) => {
-      const out = nudgesFor(t, path, '', klass(name))
-      t = { ...t, concepts: out.concepts, nudged: [...(t.nudged ?? []), ...out.nudges.map(n => n.signal)] }
+      const out = nudgesFor(t, path, null, klass(name))
+      t = { ...t, concepts: out.concepts, nudged: [...(t.nudged ?? []), ...out.nudges.map(n => n.key)] }
       return out.nudges
     }
     expect(write('src/count/ItemCountService.ts', 'ItemCountService')).toEqual([])
@@ -32,6 +32,43 @@ describe('mid-turn nudges', () => {
     const [n] = nudgesFor(turn(), 'src/a.ts', 'const x: number = y', 'const x: any = y as unknown as number').nudges
     expect(n!.signal).toBe('types')
     expect(n!.text).toContain('`any` and a double cast to src/a.ts')
+  })
+
+  test('type sprawl of any name: one nudge at the sixth new type', () => {
+    let t = turn()
+    const said: string[] = []
+    for (const name of ['Discount', 'CreateDiscountInput', 'CreateDiscountResult', 'UpdateDiscountInput', 'UpdateDiscountResult', 'ValidationResult', 'PricingResult']) {
+      const out = nudgesFor(t, `src/discounts/${name}.ts`, null, `export interface ${name} { id: string }\n`)
+      t = { ...t, concepts: out.concepts, nudged: [...(t.nudged ?? []), ...out.nudges.map(n => n.key)] }
+      said.push(...out.nudges.map(n => n.text))
+    }
+    expect(said).toHaveLength(1)
+    expect(said[0]).toContain('6 new types and classes (Discount, CreateDiscountInput')
+  })
+
+  test('validators and calculators count as pattern names now', () => {
+    const out = nudgesFor(turn({ concepts: ['DiscountValidator', 'DiscountCalculator'] }), 'src/d/DiscountService.ts', null, klass('DiscountService'))
+    expect(out.nudges.map(n => n.signal)).toEqual(['abstractions'])
+  })
+
+  test('type weakening is flagged per file, up to three files a turn', () => {
+    let t = turn()
+    const flagged: string[] = []
+    for (const f of ['a', 'b', 'c', 'd']) {
+      const out = nudgesFor(t, `src/${f}.ts`, 'const x = 1', 'const x: any = 1')
+      t = { ...t, nudged: [...(t.nudged ?? []), ...out.nudges.map(n => n.key)] }
+      flagged.push(...out.nudges.map(n => n.key))
+    }
+    expect(flagged).toEqual(['types:src/a.ts', 'types:src/b.ts', 'types:src/c.ts'])
+  })
+
+  test('the second unrequested new document is sprawl; requested or edited ones are not', () => {
+    const first = nudgesFor(turn({ request: 'add discount codes' }), 'ARCHITECTURE.md', null, '# arch')
+    expect(first.nudges).toEqual([])
+    const second = nudgesFor(turn({ request: 'add discount codes', docs: first.docs }), 'QUICKSTART.md', null, '# quick')
+    expect(second.nudges.map(n => n.text).join('')).toContain('2 new Markdown files (ARCHITECTURE.md, QUICKSTART.md)')
+    expect(nudgesFor(turn({ request: 'document the discount API', docs: ['A.md'] }), 'B.md', null, '#').nudges).toEqual([])
+    expect(nudgesFor(turn({ request: 'x', docs: ['A.md'] }), 'README.md', '# old', '# new').nudges).toEqual([])
   })
 
   test('the fifth edit to one file asks for one approach', () => {

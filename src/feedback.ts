@@ -3,61 +3,85 @@
 // the session report. Advisory text only: nothing here changes a score.
 
 import { analyze, ANALYZABLE } from './analyze.ts'
-import { isProduction, PATTERN } from './score.ts'
+import { asksForDocs, isProduction, PATTERN } from './score.ts'
 import type { SlopComponent, SlopRecord, SlopTurn } from '../types/index.d.ts'
 
 const SIGNED = 'Slop-O-Meter (advisory, from measurements):'
-/** How many pattern-named abstractions a turn may add before the guard says so. */
-const CONCEPTS_BEFORE_NUDGE = 3
+/** Pattern-named abstractions (…Service, …Factory, …Validator) a turn may add before the guard says so. */
+const PATTERNED_BEFORE_NUDGE = 3
+/** New types and classes of any name a turn may add before the guard says so. */
+const TYPES_BEFORE_NUDGE = 6
 /** How many edits to one file before the guard asks the agent to settle on an approach. */
 const EDITS_BEFORE_NUDGE = 5
+/** New Markdown files a turn may write, unasked, before the guard says so. */
+const DOCS_BEFORE_NUDGE = 2
+/** Type weakening is flagged per file, up to this many files a turn. */
+const TYPE_FILES_PER_TURN = 3
 
-export type Nudge = { signal: 'abstractions' | 'churn' | 'types'; text: string }
+export type Nudge = {
+  signal: 'abstractions' | 'churn' | 'types' | 'docs'
+  /** What the guard remembers it said: a signal, or a signal and the file it was about. */
+  key: string
+  text: string
+}
+
+export type Guarded = { nudges: Nudge[]; concepts: string[]; docs: string[] }
 
 const list = (names: string[]) => names.slice(0, 5).join(', ') + (names.length > 5 ? ', …' : '')
+const MARKDOWN = /\.(md|mdx|rst)$/i
 
 /**
- * What one edit tells the guard, given the turn so far: the nudges it earns
- * (each signal at most once a turn) and the turn's pattern-named concepts after it.
+ * What one edit tells the guard, given the turn so far: the nudges it earns (each
+ * key at most once a turn) and the turn's new concepts and documents after it.
+ * `before` is null when the edit created the file.
  */
-export function nudgesFor(
-  turn: SlopTurn,
-  path: string,
-  before: string,
-  after: string,
-): { nudges: Nudge[]; concepts: string[] } {
+export function nudgesFor(turn: SlopTurn, path: string, before: string | null, after: string): Guarded {
   const nudged = new Set(turn.nudged ?? [])
-  let concepts = turn.concepts ?? []
   const nudges: Nudge[] = []
-  const say = (signal: Nudge['signal'], text: string) => {
-    if (!nudged.has(signal)) nudges.push({ signal, text: `${SIGNED} ${text}` })
+  const say = (signal: Nudge['signal'], key: string, text: string) => {
+    if (!nudged.has(key)) nudges.push({ signal, key, text: `${SIGNED} ${text}` })
   }
+  let concepts = turn.concepts ?? []
+  let docs = turn.docs ?? []
+
   if (isProduction(path) && ANALYZABLE.test(path)) {
-    const was = analyze(before)
+    const was = analyze(before ?? '')
     const now = analyze(after)
     const had = new Set(was.declarations.map(d => d.name))
-    const added = now.declarations
-      .filter(d => d.kind !== 'function' && !had.has(d.name) && PATTERN.test(d.name))
-      .map(d => d.name)
+    const added = now.declarations.filter(d => d.kind !== 'function' && !had.has(d.name)).map(d => d.name)
     concepts = [...new Set([...concepts, ...added])]
-    if (added.length > 0 && concepts.length >= CONCEPTS_BEFORE_NUDGE) {
-      say('abstractions', `this turn has introduced ${concepts.length} pattern-named abstractions (${list(concepts)}). ` +
+    const patterned = concepts.filter(name => PATTERN.test(name))
+    if (added.length > 0 && patterned.length >= PATTERNED_BEFORE_NUDGE) {
+      say('abstractions', 'abstractions', `this turn has introduced ${patterned.length} pattern-named abstractions (${list(patterned)}). ` +
         'Each layer should be required by the task; where one will do, prefer a direct implementation and existing code.')
+    } else if (added.length > 0 && concepts.length >= TYPES_BEFORE_NUDGE) {
+      say('abstractions', 'abstractions', `this turn has introduced ${concepts.length} new types and classes (${list(concepts)}). ` +
+        'Prefer fewer, existing or inferred types; a separate input or result type for every function is rarely needed.')
     }
     const weakening = [
       [now.any - was.any, '`any`'],
       [now.doubleCasts - was.doubleCasts, 'a double cast'],
       [now.suppressions - was.suppressions, 'a compiler suppression'],
     ].filter(([n]) => (n as number) > 0).map(([, what]) => what)
-    if (weakening.length > 0) {
-      say('types', `this edit adds ${weakening.join(' and ')} to ${path}. Prefer a real type over weakening the checker.`)
+    const typeFiles = [...nudged].filter(k => k.startsWith('types:')).length
+    if (weakening.length > 0 && typeFiles < TYPE_FILES_PER_TURN) {
+      say('types', `types:${path}`, `this edit adds ${weakening.join(' and ')} to ${path}. Prefer a real type over weakening the checker.`)
     }
   }
+
+  if (before === null && MARKDOWN.test(path)) {
+    docs = [...new Set([...docs, path])]
+    if (docs.length >= DOCS_BEFORE_NUDGE && !asksForDocs(turn.request ?? '')) {
+      say('docs', 'docs', `this turn has written ${docs.length} new Markdown files (${list(docs)}) that the request did not ask for. ` +
+        'Unless documentation is part of the task, put the summary in your reply instead of new files.')
+    }
+  }
+
   const edits = turn.edits[path]?.ops ?? 0
   if (edits >= EDITS_BEFORE_NUDGE) {
-    say('churn', `${path} has been edited ${edits} times this turn. Settle on one approach before rewriting it again.`)
+    say('churn', 'churn', `${path} has been edited ${edits} times this turn. Settle on one approach before rewriting it again.`)
   }
-  return { nudges, concepts }
+  return { nudges, concepts, docs }
 }
 
 const drivers = (record: SlopRecord) =>

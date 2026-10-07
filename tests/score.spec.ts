@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { churn, combine, lineDiff, saturate, scoreTurn, stateOf, surface } from '../src/score.ts'
+import { churn, combine, docSprawl, lineDiff, saturate, scoreTurn, stateOf, surface } from '../src/score.ts'
 
 const change = (path: string, added: number, deleted = 0) => ({ path, added, deleted })
 
@@ -165,5 +165,26 @@ describe('comment noise', () => {
       ],
     })
     expect(s.components.find(c => c.key === 'comments')!.normalized).toBe(0)
+  })
+})
+
+describe('documentation sprawl', () => {
+  const doc = (path: string, added = 80) => ({ path, added, deleted: 0, isNew: true })
+
+  test('one new document is fine; three unrequested ones are sprawl, named', () => {
+    expect(docSprawl([doc('NOTES.md')], 'add discounts').normalized).toBe(0)
+    const s = docSprawl([doc('ARCHITECTURE.md'), doc('QUICKSTART.md'), doc('IMPLEMENTATION_SUMMARY.md')], 'add discounts')
+    expect(s.normalized!).toBeGreaterThan(0.6)
+    expect(s.reason).toContain('3 new Markdown files nobody asked for (ARCHITECTURE.md, QUICKSTART.md, IMPLEMENTATION_SUMMARY.md)')
+  })
+
+  test('documents the request asked for are the work, not sprawl', () => {
+    const s = docSprawl([doc('docs/api.md'), doc('docs/setup.md'), doc('README.md')], 'Write documentation for the API')
+    expect(s.normalized).toBe(0)
+    expect(s.reason).toBe('documentation was requested')
+  })
+
+  test('editing existing documents is not sprawl', () => {
+    expect(docSprawl([{ path: 'README.md', added: 40, deleted: 2 }, { path: 'CHANGELOG.md', added: 5, deleted: 0 }], 'x').normalized).toBe(0)
   })
 })

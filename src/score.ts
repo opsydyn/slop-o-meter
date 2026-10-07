@@ -18,6 +18,8 @@ export type TurnInput = {
   edits: EditActivity
   /** Contents of the changed source files and package.json files. */
   files?: FileVersion[]
+  /** What the person asked for this turn. */
+  request?: string
 }
 
 export type Scored = { score: number; state: State; components: Component[] }
@@ -32,6 +34,7 @@ export const WEIGHTS = {
   dependencies: 5,
   duplication: 5,
   comments: 5,
+  docs: 5,
 }
 
 const STATES: [number, State][] = [
@@ -165,7 +168,7 @@ export function combine(components: Component[]): Scored {
   return { score, state: stateOf(score), components: scaled }
 }
 
-export function scoreTurn({ changes, edits, files = [] }: TurnInput): Scored {
+export function scoreTurn({ changes, edits, files = [], request = '' }: TurnInput): Scored {
   const code = pairs(files)
   const prodChanged = changes.some(c => isProduction(c.path) && !/(^|\/)package\.json$/.test(c.path))
   // Language metrics are unavailable when production code changed but none of it could be read.
@@ -180,6 +183,7 @@ export function scoreTurn({ changes, edits, files = [] }: TurnInput): Scored {
     dependencies(files),
     duplication(code, measurable),
     comments(code, measurable),
+    docSprawl(changes, request),
     tests(code, measurable),
   ])
 }
@@ -239,7 +243,7 @@ function behaviourOf(code: Pair[]): number {
   return Math.max(1, branches + newTests + lines / 25)
 }
 
-export const PATTERN = /(Factory|Service|Repository|Repo|Adapter|Wrapper|Manager|Provider|Handler|Builder|Strategy|Helper|Helpers|Util|Utils|Base|Abstract|Impl|Interface|Config|Facade|Proxy|Registry|Orchestrator|Coordinator)$/
+export const PATTERN = /(Factory|Service|Repository|Repo|Adapter|Wrapper|Manager|Provider|Handler|Builder|Strategy|Helper|Helpers|Util|Utils|Base|Abstract|Impl|Interface|Config|Facade|Proxy|Registry|Orchestrator|Coordinator|Validator|Calculator|Processor|Controller|Engine|Generator|Exporter|Serializer|Resolver|Dispatcher|Formatter)$/
 const WEIGHT_OF = { class: 1, interface: 1, enum: 1, type: 0.5 }
 type Concept = { name: string; kind: keyof typeof WEIGHT_OF; exported: boolean; consumers: number }
 
@@ -401,6 +405,26 @@ export function comments(code: Pair[], measurable: boolean): Component {
   if (excess > 0) parts.push(`${commentLines} comment lines for ${codeLines} code lines`)
   return component('comments', 'comment noise', measurable ? saturate(restating + excess / 6, 3) : null,
     { restating, commentLines, codeLines, docBlocks: sum(prod, f => f.docBlocks) }, parts.join(', ') || 'comments in proportion')
+}
+
+const MARKDOWN = /\.(md|mdx|rst)$/i
+
+/** Whether the request itself asked for documentation, in which case new docs are the work, not sprawl. */
+export const asksForDocs = (request: string) =>
+  /\b(docs?|documentation|document|readme|markdown|guide|write-?up|changelog)\b|\.md\b/i.test(request)
+
+/** New Markdown files a turn wrote without being asked: summaries, architecture notes, quickstarts. */
+export function docSprawl(changes: FileChange[], request: string): Component {
+  const created = changes.filter(c => c.isNew && MARKDOWN.test(c.path))
+  const lines = created.reduce((n, c) => n + c.added, 0)
+  if (created.length > 0 && asksForDocs(request)) {
+    return component('docs', 'documentation sprawl', 0, { newDocs: created.length, lines }, 'documentation was requested')
+  }
+  const names = created.map(c => c.path.split('/').at(-1)!)
+  return component('docs', 'documentation sprawl', saturate(Math.max(0, created.length - 1), 1.5),
+    { newDocs: created.length, lines },
+    created.length === 0 ? 'no new documents' : `${plural(created.length, 'new Markdown file')} nobody asked for (${names.slice(0, 4).join(', ')}${names.length > 4 ? ', …' : ''}), ${lines} lines`,
+    created.map(c => c.path))
 }
 
 /**

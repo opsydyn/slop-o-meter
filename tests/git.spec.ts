@@ -40,7 +40,7 @@ describe('turn baseline', () => {
 
     const changes = await diffTrees(run, repo, before, after)
     expect(changes.sort((a, b) => a.path.localeCompare(b.path))).toEqual([
-      { path: 'src/new.ts', added: 1, deleted: 0 },
+      { path: 'src/new.ts', added: 1, deleted: 0, isNew: true },
       { path: 'user.ts', added: 1, deleted: 0 },
     ])
   })

@@ -36,13 +36,16 @@ export async function diffTrees(run: Run, repo: Repo, before: string, after: str
   if (before === after) return []
   const r = await run(['git', '-C', repo.root, 'diff', '--numstat', '--no-renames', '-z', before, after])
   if (r.exitCode !== 0) return []
+  const created = await run(['git', '-C', repo.root, 'diff', '--name-only', '--diff-filter=A', '--no-renames', '-z', before, after])
+  const isNew = new Set(created.exitCode === 0 ? created.stdout.split('\0').filter(Boolean) : [])
   return r.stdout
     .split('\0')
     .filter(Boolean)
     .map(line => {
       const [added, deleted, path] = line.split('\t')
       // Binary files report '-': count them as one changed line each way.
-      return { path: path!, added: added === '-' ? 1 : Number(added), deleted: deleted === '-' ? 1 : Number(deleted) }
+      const change = { path: path!, added: added === '-' ? 1 : Number(added), deleted: deleted === '-' ? 1 : Number(deleted) }
+      return isNew.has(change.path) ? { ...change, isNew: true } : change
     })
 }
 

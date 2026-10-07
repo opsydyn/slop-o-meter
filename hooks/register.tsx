@@ -112,7 +112,7 @@ export const register: Register = (on, options) => {
   on('turn.start', async ($, e, next) => {
     const r = await getRepo($)
     const baseline = r ? await snapshot(runner($), r) : null
-    await update($, turn, () => ({ baseline, edits: {} }))
+    await update($, turn, () => ({ baseline, edits: {}, request: e.text }))
     return next(e)
   })
 
@@ -120,11 +120,12 @@ export const register: Register = (on, options) => {
     if (e.tool !== 'Edit' && e.tool !== 'Write') return next(e)
     const r = await getRepo($)
     const path = r && relative(r, e.file_path)
-    const before = e.tool === 'Write' ? await $.fs.read(e.file_path).catch(() => '') : e.old_string
+    // null when Write creates the file.
+    const before = e.tool === 'Write' ? await $.fs.read(e.file_path).catch(() => null) : e.old_string
     const result = await next(e)
     if (!path || 'deny' in result || result.isError) return result
     const after = e.tool === 'Write' ? e.content : e.new_string
-    const { added, deleted } = lineDiff(before, after)
+    const { added, deleted } = lineDiff(before ?? '', after)
     await update($, turn, t => {
       if (!t) return t
       const was = t.edits[path] ?? { ops: 0, added: 0, deleted: 0 }
@@ -134,8 +135,8 @@ export const register: Register = (on, options) => {
     const t = guard === 'off' ? null : await read($, turn)
     if (!t) return result
     // The guard: a note only the model reads, beside this tool's result. It never blocks the edit.
-    const { nudges, concepts } = nudgesFor(t, path, before, after)
-    await update($, turn, x => x && { ...x, concepts, nudged: [...(x.nudged ?? []), ...nudges.map(n => n.signal)] })
+    const { nudges, concepts, docs } = nudgesFor(t, path, before, after)
+    await update($, turn, x => x && { ...x, concepts, docs, nudged: [...(x.nudged ?? []), ...nudges.map(n => n.key)] })
     if (nudges.length === 0) return result
     $.ui.toast(`Slop-O-Meter nudged Claude: ${nudges.map(n => n.signal).join(', ')}`)
     return { ...result, context: [...(result.context ?? []), ...nudges.map(n => n.text)] }
@@ -154,9 +155,9 @@ export const register: Register = (on, options) => {
     if (changes.length === 0 && Object.keys(t.edits).length === 0) return next(e)
 
     const files = await readVersions(run, r, t.baseline, final, changes)
-    const scored = scoreTurn({ changes, edits: t.edits, files })
+    const scored = scoreTurn({ changes, edits: t.edits, files, request: t.request })
     const previous = await read($, last)
-    const record = toRecord(scored, changes, previous, t.nudged ?? [])
+    const record = toRecord(scored, changes, previous, (t.nudged ?? []).map(key => key.split(':')[0]!))
     const all = [...(await read($, history)), record].slice(-HISTORY_LIMIT)
     await update($, history, () => all)
     await update($, last, () => record)

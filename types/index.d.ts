@@ -1,4 +1,10 @@
-export type SlopFileChange = { path: string; added: number; deleted: number }
+export type SlopFileChange = {
+  path: string
+  added: number
+  deleted: number
+  /** The file did not exist before the turn. */
+  isNew?: boolean
+}
 
 /** What the agent's edit tools did during a turn, per repo-relative path. */
 export type SlopEditActivity = Record<string, { ops: number; added: number; deleted: number }>
@@ -35,9 +41,13 @@ export type SlopRecord = {
 export type SlopTurn = {
   baseline: string | null
   edits: SlopEditActivity
-  /** Pattern-named abstractions the turn has introduced so far. */
+  /** What the person asked for, so feedback can tell requested work from unrequested. */
+  request?: string
+  /** New classes, interfaces, enums and types the turn has introduced so far. */
   concepts?: string[]
-  /** Signals the guard has already nudged Claude about this turn. */
+  /** New Markdown files the turn has written so far. */
+  docs?: string[]
+  /** What the guard has already nudged Claude about this turn (a signal, or a signal and a file). */
   nudged?: string[]
 }
 
