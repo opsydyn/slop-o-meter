@@ -42,6 +42,47 @@ recorded at the time; "now" is the same change scored by the calibrated code (fi
 - **Correctness is out of scope:** writing 6b's tests showed the `paid === 0 && !isAdmin` rule is
   unreachable. No structural metric can see that, and none should pretend to.
 
+## Does the guard work? (A/B, session 2)
+
+Independent headless sessions (Haiku 4.5), each on a fresh copy of the shop fixture, the mod loaded from this
+repository. Three prompts that invite over-engineering the way people actually phrase work, none asking for slop:
+discount codes ("production-ready and extensible, following clean architecture"), CSV/JSON export ("easy to add
+new formats later"), and rate limiting ("robust and configurable"). Each with `guard: off` and `guard: nudge`,
+two runs each.
+
+| Task | off | nudge |
+|---|---|---|
+| t1 discount codes | 48, 40 | 43, 47 |
+| t2 export | 5, 16 | 14, 31 |
+| t3 rate limiting | 16, 19 | 19, 17 |
+| mean | 24.0 | 28.5 |
+
+**No measurable reduction, and the reason is ours.** In twelve runs the guard spoke four times (one
+type-weakening nudge in each t1-nudge run, delivered as a post-tool note); the abstraction nudge never fired.
+
+- **Delivery works.** Nudges arrive beside the tool result; the strict-mode note reaches the next turn
+  (verified in one process: asked what it had been told, the agent quoted the note word for word and named its
+  own over-engineering). Plugin-appended rows are not saved to headless transcripts, so `claude -p -c` across
+  two processes cannot see them; that first test was invalid, not strict mode.
+- **When a nudge fires, it lands.** In t1-nudge-1 the agent's edit added `any` to `routes.ts`; its very next
+  edit replaced it with a real imported type. Neither nudged run kept `any` in `routes.ts`. Weakening in other
+  files went unflagged, because each signal speaks once a turn.
+- **The abstraction trigger watches for yesterday's slop.** It waits for three Gang-of-Four names (Service,
+  Factory, Adapter…). These agents produced *type sprawl* instead: thirteen exported interfaces for a discount
+  feature (`CreateDiscountInput`, `UpdateDiscountResult`, `ValidationResult`…), plus `DiscountValidator` and
+  `DiscountCalculator`, names the pattern list lacks. The score caught it (abstractions +13 to +17); the
+  nudge did not.
+- **A slop the meter cannot see at all: documentation sprawl.** Unrequested `ARCHITECTURE.md`,
+  `IMPLEMENTATION_SUMMARY.md`, `QUICKSTART.md`, `DISCOUNTS.md`: up to four new Markdown files in one turn.
+  Surface ignores docs and comment noise reads only code, so none of it counts.
+- **n = 2 per cell is too small.** Same prompt, same arm: 5 vs 16, 14 vs 31.
+- Lab noise: untracked files the harness itself writes (a FIFO, an output log) count as change surface, as
+  designed; the in-process strict check scored 43 partly for that reason.
+
+**What we change next:** nudge on new exported types and classes of any name (relative to behaviour), widen
+the pattern list, flag type weakening once per file rather than once per turn, add documentation sprawl as a
+measured signal with its own nudge, then rerun with at least four runs per cell.
+
 ## Fixture scenarios (`tests/fixtures/scenarios.ts`)
 
 The same request, "add a search endpoint", implemented several ways, plus the other experiments from
