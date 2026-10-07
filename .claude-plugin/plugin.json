@@ -20,6 +20,13 @@
       "description": "Advisory score budget per turn. Slop-O-Meter observes; it never blocks edits.",
       "default": 40,
       "required": false
+    },
+    "mascot": {
+      "type": "boolean",
+      "title": "Płanetnik",
+      "description": "Show Płanetnik, the storm spirit who judges each turn, in the band and the /slop pane.",
+      "default": true,
+      "required": false
     }
   }
 }

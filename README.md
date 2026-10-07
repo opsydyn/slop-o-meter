@@ -48,6 +48,18 @@ invented). Simplification is rewarded: removing abstractions, complexity or dupl
 
 Crossing into Big Ball of Mud slams the needle into the red once; staying there does not repeat it.
 
+## Płanetnik
+
+<p>
+  <img src="docs/planetnik-calm.svg" alt="Płanetnik under calm skies" width="150">
+  <img src="docs/planetnik-storm.svg" alt="Płanetnik in a full storm, eyes blazing" width="150">
+</p>
+
+In Polish lore a płanetnik rides the storm clouds and drives the hail. Ours stands on his cloud beside the
+gauge and judges each turn: calm skies for clean code, gathering cloud as it gets sloppy, lightning in his raised
+fist at Heavy Slop, and a full storm with slop splattered over him at Big Ball of Mud. His face rides in the band
+too, from `(•_•)` to `(╬ಠ益ಠ)`. He is presentation only; turn him off with `mascot` in `/config`.
+
 ## Install
 
 Requires a Claude Code build with mods (function hooks); developed against 2.1.286. Git must be on the path.
@@ -73,6 +85,8 @@ yet set; until you set it, the default of 40 applies.
 
 The gauge is an SVG instrument in the desktop Code tab, VS Code and mobile, and a cell raster in the
 terminal. Where no custom drawing is available, `/slop` still prints the full explanation.
+
+**Settings** (`/config`, under slop-o-meter): `mascot` shows or hides Płanetnik.
 
 **Budget:** an advisory per-turn score, default 40, shown in the pane as over or under. Set `budget` in
 `/config` under slop-o-meter. Slop-O-Meter observes; it never blocks an edit.

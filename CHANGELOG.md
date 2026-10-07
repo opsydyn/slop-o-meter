@@ -14,5 +14,7 @@ First release: a deterministic core and the gauge.
   `diff`, `history`, `reset`.
 - An SVG gauge (desktop, VS Code, mobile) with needle animation and a one-time Big Ball of Mud slam; a
   raster gauge in the terminal.
+- Płanetnik, the storm spirit from Polish lore, judges each turn beside the gauge (SVG on desktop, half-block
+  raster in the terminal) and in the band; the `mascot` setting turns him off.
 - Per-repository history, an advisory `budget` setting, no network access, no telemetry.
 - Calibrated against fixture scenarios and seven live dogfood experiments (DOGFOOD.md).

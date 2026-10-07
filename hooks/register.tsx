@@ -4,6 +4,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import { crossedIntoMud, colorOf, gaugeCells, gaugeSvg, sweep } from '../src/gauge.ts'
 import { diffTrees, findRepo, readFiles, snapshot, type Repo, type Run } from '../src/git.ts'
 import { ANALYZABLE } from '../src/analyze.ts'
+import { CELL_ROWS, planetnikAlt, planetnikCells, planetnikFace, planetnikSvg, WIDTH } from '../src/mascot.ts'
 import { explain, lineDiff, scoreTurn, type FileVersion, type Scored } from '../src/score.ts'
 import type { SlopRecord } from '../types/index.d.ts'
 
@@ -19,6 +20,8 @@ const history = atom({ plugin: 'slop-o-meter', key: 'history' } as const, [])
 let repo: Repo | null | undefined
 /** Width of the terminal gauge as last drawn, so a sweep can blit the mounted raster. */
 let rasterColumns: number | null = null
+/** Whether the terminal pane last drew Płanetnik, so a fresh result can animate him. */
+let planetnikShown = false
 
 function runner($: EngineInterface): Run {
   return async (argv, init) => {
@@ -50,6 +53,23 @@ function animateRaster($: EngineInterface, record: SlopRecord) {
   })
 }
 
+const crossingOf = (record: SlopRecord) =>
+  crossedIntoMud(record.score, record.delta === null ? null : record.score - record.delta)
+
+/** Plays Płanetnik's weather once in the terminal after a scored turn, striking first when it crossed into mud. */
+function animatePlanetnik($: EngineInterface, record: SlopRecord) {
+  if (!planetnikShown) return
+  const strike = crossingOf(record) ? [0, 1, 2].map(f => planetnikCells(record.score, f, { strike: f !== 1 })) : []
+  const frames = [...strike, ...Array.from({ length: 12 }, (_, f) => planetnikCells(record.score, f)), planetnikCells(record.score)]
+  let i = 0
+  const timer = $.clock.every(140, async () => {
+    const cells = frames[i++]
+    const done = !cells ||
+      'deny' in (await $.ui.blit({ requestId: PANE, key: 'planetnik', cells, columns: WIDTH, rows: CELL_ROWS }))
+    if (done || i >= frames.length) timer.cancel()
+  })
+}
+
 /** Changed source files and manifests, both sides, skipping anything huge. */
 async function readVersions(run: Run, r: Repo, before: string, after: string, changes: SlopRecord['changes']): Promise<FileVersion[]> {
   const paths = changes
@@ -68,6 +88,7 @@ const relative = (r: Repo, path: string) =>
 
 export const register: Register = (on, options) => {
   const budget = typeof options.budget === 'number' ? options.budget : 40
+  const mascot = options.mascot !== false
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -129,6 +150,7 @@ export const register: Register = (on, options) => {
     await update($, last, () => record)
     await $.store.set(storeKey(r), all)
     animateRaster($, record)
+    if (mascot) animatePlanetnik($, record)
     if (crossedIntoMud(record.score, previous?.score ?? null)) {
       $.ui.toast(`⚠ BIG BALL OF MUD: slop score ${record.score}. /slop explain says why.`)
     }
@@ -177,6 +199,7 @@ export const register: Register = (on, options) => {
         ) : (
           <Text dimColor>— no scored turns yet</Text>
         )}
+        {mascot && record && <Text color="#a39b8e">  Płanetnik {planetnikFace(record.score)}</Text>}
         {t && <Text dimColor>  · analysing… {ops} edits in {files} files</Text>}
       </Box>
       {below}
@@ -198,8 +221,10 @@ export const register: Register = (on, options) => {
       const { Raster } = $.ui.resolve(e)
       const columns = Math.max(10, Math.min(48, width - 2))
       rasterColumns = columns
+      planetnikShown = mascot && width >= WIDTH + 2
       gauge = (
         <Box flexDirection="column">
+          {planetnikShown && <Raster key="planetnik" columns={WIDTH} rows={CELL_ROWS} cells={planetnikCells(record.score)} />}
           <Raster key={GAUGE} columns={columns} rows={2} cells={gaugeCells(record.score, columns)} />
           <Text color={color} bold>
             {record.score}/100  {record.state === 'BIG BALL OF MUD' ? '⚠ ' : ''}{record.state} {trend(record.delta)}
@@ -210,12 +235,24 @@ export const register: Register = (on, options) => {
       const { Svg } = $.ui.resolve(e)
       const animate = Date.now() - record.at < FRESH_MS
       gauge = (
-        <Svg
-          source={gaugeSvg({ ...record, animate })}
-          alt={`Slop score ${record.score} of 100: ${record.state}`}
-          width={Math.min(320, width * 8)}
-          isInteractive={animate}
-        />
+        <Box flexDirection="row" alignItems="center" flexWrap="wrap" gap={2}>
+          <Svg
+            key={GAUGE}
+            source={gaugeSvg({ ...record, animate })}
+            alt={`Slop score ${record.score} of 100: ${record.state}`}
+            width={Math.min(mascot ? 280 : 320, width * 8)}
+            isInteractive={animate}
+          />
+          {mascot && (
+            <Svg
+              key="planetnik"
+              source={planetnikSvg(record.score, { animate, crossing: animate && crossingOf(record) })}
+              alt={planetnikAlt(record.score)}
+              width={Math.min(180, width * 4)}
+              isInteractive={animate}
+            />
+          )}
+        </Box>
       )
     }
 

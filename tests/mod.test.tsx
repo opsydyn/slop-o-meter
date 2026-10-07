@@ -75,8 +75,8 @@ test('the band shows the score and state', async ($, on) => {
 test('the pane draws an SVG gauge on desktop and a raster on the terminal', async ($, on) => {
   await sessionWith($, on, RECORD)
   const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  const svg = await desktop.find({ type: 'Svg' })
-  expect(svg?.props.alt).toBe('Slop score 87 of 100: BIG BALL OF MUD')
+  const alts = (await desktop.findAll({ type: 'Svg' })).map(svg => svg.props.alt)
+  expect(alts).toContain('Slop score 87 of 100: BIG BALL OF MUD')
   expect(await desktop.find({ type: 'Text', text: /unavailable/ })).toBeDefined()
   await desktop.unmount()
 
@@ -113,5 +113,31 @@ test("another mod's band is preserved, not replaced", { plugins: [OTHER_BAND] },
     expect(await ui.find({ type: 'Text', text: /87\s+BIG BALL OF MUD/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /other mod's band/ })).toBeDefined()
     await ui.unmount()
+  }
+})
+
+test('Płanetnik judges the turn beside the gauge, in the band, and on the terminal', async ($, on) => {
+  await sessionWith($, on, RECORD)
+  const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await desktop.findAll({ type: 'Svg' })).map(svg => svg.props.alt)).toContain('Płanetnik: a full storm, eyes blazing')
+  await desktop.unmount()
+  const terminal = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await terminal.find({ type: 'Raster', key: 'planetnik' })).toBeDefined()
+  await terminal.unmount()
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await band.find({ type: 'Text', text: /Płanetnik \(╬ಠ益ಠ\)/ })).toBeDefined()
+  await band.unmount()
+})
+
+test('the mascot setting turns Płanetnik off everywhere', { options: { mascot: false } }, async ($, on) => {
+  await sessionWith($, on, RECORD)
+  for (const surface of SURFACES) {
+    const pane = await $.ui.mount({ ...PANE, surface })
+    expect(await pane.find({ key: 'planetnik' })).toBeUndefined()
+    expect((await pane.findAll({ type: 'Svg' })).map(svg => String(svg.props.alt))).not.toContain('Płanetnik: a full storm, eyes blazing')
+    await pane.unmount()
+    const band = await $.ui.mount({ ...BAND, surface })
+    expect(await band.find({ type: 'Text', text: /Płanetnik/ })).toBeUndefined()
+    await band.unmount()
   }
 })
