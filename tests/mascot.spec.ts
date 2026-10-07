@@ -45,10 +45,30 @@ describe('Płanetnik', () => {
 })
 
 describe('Płanetnik in the terminal', () => {
-  test('half-block cells on his tile', () => {
+  test('half-block cells, empty ones on the terminal\'s own background', () => {
     const words = new Uint32Array(Uint8Array.fromBase64(planetnikCells(87, 3)).buffer)
     expect(words.length).toBe(WIDTH * CELL_ROWS * 3)
-    for (let i = 0; i < words.length; i += 3) expect([0x20, 0x2580, 0x2584]).toContain(words[i]!)
+    for (let i = 0; i < words.length; i += 3) {
+      expect([0x20, 0x2580, 0x2584]).toContain(words[i]!)
+      if (words[i] === 0x20) expect(words[i + 2]).toBe(0x01000000)
+    }
+  })
+})
+
+describe('his hair in the wind', () => {
+  const EDGE = [0, 17, 19, 20, 21, 21, 21, 21, 21, 21]
+  /** Hair pixels past each row's resting edge, rows 1 to 9. */
+  const blown = (score: number) => EDGE.slice(1).map((edge, i) =>
+    planetnik(score)[i + 1]!.slice(edge + 1).filter(p => p === 'h' || p === 'H' || p === 'l').length)
+  const total = (rows: number[]) => rows.reduce((a, b) => a + b, 0)
+
+  test('is still when calm and streams further as the storm grows', () => {
+    expect(total(blown(5))).toBe(0)
+    expect(total(blown(30))).toBeLessThan(total(blown(50)))
+  })
+
+  test('streams as one mass, without gaps between strands', () => {
+    expect(blown(50).every(n => n > 0)).toBe(true)
   })
 })
 
@@ -62,6 +82,10 @@ describe('Płanetnik as SVG', () => {
     const crossing = planetnikSvg(87, { animate: true, crossing: true })
     expect(crossing).toContain('begin="0.38s"')
     expect(planetnikSvg(90, { animate: true })).not.toContain('begin="0.38s"')
+  })
+
+  test('draws on the pane itself, with no background tile', () => {
+    expect(planetnikSvg(50)).not.toContain('rx="10"')
   })
 
   test('fits the surface limit', () => {

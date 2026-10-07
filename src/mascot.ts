@@ -26,8 +26,6 @@ export type Pixel = keyof typeof PALETTE
 export type Grid = (Pixel | null)[][]
 type Put = (x: number, y: number, p: Pixel) => void
 
-const TILE = '#0f1729'
-const FLASH = '#2f3a5c'
 const MOODS: SlopState[] = ['CLEAN', 'MILD SLOP', 'GETTING SLOPPY', 'HEAVY SLOP', 'BIG BALL OF MUD']
 const FACES = ['(•_•)', '(¬_¬)', '(ಠ_ಠ)', '(ಠ益ಠ)', '(╬ಠ益ಠ)']
 const MOODS_SAID = ['calm skies', 'a cloud gathering', 'grey clouds and a heavy brow', 'raising lightning in the rain', 'a full storm, eyes blazing']
@@ -90,13 +88,19 @@ function weather(put: Put, mood: number, frame: number) {
 }
 
 /** Hair streaming in the wind, longer as the storm grows; his raised arm takes the lower strands. */
+/** How far each row of hair blows, as a share of the wind: fullest at the crown, thinning to the beard. */
+const SWEEP = [0, 0.6, 1, 1, 0.9, 0.8, 0.7, 0.55, 0.4, 0.25]
+/** Where each row of his hair ends on the windward side. */
+const HAIR_EDGE = [0, 17, 19, 20, 21, 21, 21, 21, 21, 21]
+
+/** The wind sweeps his hair to the right as one tapering mass, longer as the storm grows. */
 function wind(put: Put, mood: number, frame: number) {
-  const reach = [0, 1, 3, 5, 7][mood]!
-  const strand = (x0: number, y: number, len: number) => {
-    for (let i = 0; i < len; i++) put(x0 + i, y, i === len - 1 ? 'l' : 'h')
+  const reach = [0, 2, 4, 6, 7][mood]!
+  for (let y = 1; y < SWEEP.length; y++) {
+    const base = Math.round(reach * SWEEP[y]!)
+    const len = base > 0 && (frame + y) % 3 === 0 ? base + 1 : base
+    for (let i = 1; i <= len; i++) put(HAIR_EDGE[y]! + i, y, i === len ? 'l' : y % 3 === 0 ? 'H' : 'h')
   }
-  for (const y of [1, 2, 3]) strand(20, y, Math.max(0, reach - (y % 2) + ((frame + y) % 2)))
-  if (mood < 3) for (const y of [5, 7, 9]) strand(22, y, Math.max(0, reach - 1 + ((frame + y) % 2)))
 }
 
 function figure(put: Put, mood: number, frame: number) {
@@ -248,28 +252,26 @@ export function planetnikSvg(score: number, { animate = false, crossing = false 
   const strike = crossing
     ? `<g opacity="0">${STRIKE.map(([x, y]) => `<rect x="${x * SCALE}" y="${y * SCALE}" width="${SCALE}" height="${SCALE}" fill="${PALETTE.z}"/>`).join('')}<animate attributeName="opacity" begin="0.38s" dur="0.6s" values="0;1;1;0" keyTimes="0;0.1;0.6;1"/></g>`
     : ''
-  const flash = crossing ? `<animate attributeName="fill" begin="0.38s" dur="0.4s" values="${TILE};${FLASH};${TILE}"/>` : ''
   const w = WIDTH * SCALE
   const h = HEIGHT * SCALE
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-12 -12 ${w + 24} ${h + 24}" shape-rendering="crispEdges" role="img">` +
-    `<rect x="-12" y="-12" width="${w + 24}" height="${h + 24}" rx="10" fill="${TILE}">${flash}</rect>` +
     `<g>${motion}${runs(planetnik(score))}${strike}</g></svg>`
 }
 
 export const CELL_ROWS = HEIGHT / 2
 
-/** Płanetnik as terminal cells: each cell is two pixels, ▀ over ▄, on his navy tile. */
+/** Płanetnik as terminal cells: each cell is two pixels, ▀ over ▄, on the terminal's own background. */
 export function planetnikCells(score: number, frame = 0, options: { strike?: boolean } = {}): string {
   const grid = planetnik(score, frame, options)
-  const tile = parseInt(TILE.slice(1), 16)
-  const color = (p: Pixel | null | undefined) => (p ? parseInt(PALETTE[p].slice(1), 16) : tile)
+  const DEFAULT = 0x01000000
+  const color = (p: Pixel | null | undefined) => (p ? parseInt(PALETTE[p].slice(1), 16) : DEFAULT)
   const words = new Uint32Array(WIDTH * CELL_ROWS * 3)
   for (let row = 0; row < CELL_ROWS; row++) {
     for (let x = 0; x < WIDTH; x++) {
       const top = grid[row * 2]![x]
       const bottom = grid[row * 2 + 1]?.[x]
       const code = top ? 0x2580 : bottom ? 0x2584 : 0x20
-      words.set([code, color(top ?? bottom), top ? color(bottom) : tile], (row * WIDTH + x) * 3)
+      words.set([code, color(top ?? bottom), top ? color(bottom) : DEFAULT], (row * WIDTH + x) * 3)
     }
   }
   return new Uint8Array(words.buffer).toBase64()
