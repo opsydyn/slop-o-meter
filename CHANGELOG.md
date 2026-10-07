@@ -16,5 +16,8 @@ First release: a deterministic core and the gauge.
   raster gauge in the terminal.
 - Płanetnik, the storm spirit from Polish lore, judges each turn beside the gauge (SVG on desktop, half-block
   raster in the terminal) and in the band; the `mascot` setting turns him off.
+- The guard: mid-turn nudges to Claude on pattern-named abstraction pile-ups, type weakening and repeated
+  rewrites; an opt-in strict mode that leaves Claude a note after an over-budget turn; a Simplify button in the
+  pane; and `/slop report` for the session. Advisory only, shown to the person, never part of the score.
 - Per-repository history, an advisory `budget` setting, no network access, no telemetry.
 - Calibrated against fixture scenarios and seven live dogfood experiments (DOGFOOD.md).

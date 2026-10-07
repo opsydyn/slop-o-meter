@@ -15,6 +15,8 @@ export type SlopComponent = {
   contribution: number
   raw: Record<string, number>
   reason: string
+  /** The names or paths the reason is about (single-consumer abstractions, churned files). */
+  subjects?: string[]
 }
 
 export type SlopRecord = {
@@ -25,10 +27,19 @@ export type SlopRecord = {
   delta: number | null
   components: SlopComponent[]
   changes: SlopFileChange[]
+  /** The guard's mid-turn nudges to Claude during this turn, by signal. */
+  nudges?: string[]
 }
 
 /** The turn in progress: kept in state so a hot reload mid-turn loses nothing. */
-export type SlopTurn = { baseline: string | null; edits: SlopEditActivity }
+export type SlopTurn = {
+  baseline: string | null
+  edits: SlopEditActivity
+  /** Pattern-named abstractions the turn has introduced so far. */
+  concepts?: string[]
+  /** Signals the guard has already nudged Claude about this turn. */
+  nudged?: string[]
+}
 
 declare module 'claude-code' {
   interface PluginState {
@@ -36,6 +47,8 @@ declare module 'claude-code' {
       turn: SlopTurn | null
       last: SlopRecord | null
       history: SlopRecord[]
+      /** When this session began, so /slop report covers the session alone. */
+      since: number | null
     }
   }
 }

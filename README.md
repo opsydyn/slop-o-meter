@@ -48,6 +48,26 @@ invented). Simplification is rewarded: removing abstractions, complexity or dupl
 
 Crossing into Big Ball of Mud slams the needle into the red once; staying there does not repeat it.
 
+## The guard
+
+A meter that only you can see tells you about slop after the fact. The guard turns the same measurements
+into feedback for Claude, while it works:
+
+- **Mid-turn nudges** (`guard: nudge`, the default). When a turn piles up pattern-named abstractions (the third
+  `…Service`, `…Adapter` or `…Factory`), adds `any`, double casts or `@ts-ignore`, or edits one file for the fifth
+  time, Claude gets one short note beside that tool's result, naming what it measured. Each signal speaks at most
+  once a turn, and you see a toast whenever Claude is nudged.
+- **Strict mode** (`guard: strict`). After a turn over your budget, Claude gets a note for its next turn saying
+  what drove the score, and the transcript shows you that the note was left.
+- **Simplify this change.** A button in the `/slop` pane that asks Claude to simplify the last change, pointing
+  at what drove its score and the names behind it (the single-consumer abstractions, the churned files).
+  Nothing is sent until you press it.
+- **`/slop report`.** The session so far: turns scored, average and median, the worst turn and the best
+  simplification, recurring signals, and how often the guard spoke.
+
+The guard never blocks an edit and never changes a score: the numbers measure what happened, whether or not
+Claude took the advice. `guard: off` keeps Slop-O-Meter a silent observer.
+
 ## Płanetnik
 
 <p>
@@ -81,12 +101,14 @@ yet set; until you set it, the default of 40 applies.
 | `/slop explain` | the explanation only |
 | `/slop diff` | the files the last scored turn changed |
 | `/slop history` | the last 20 scored turns |
+| `/slop report` | the session so far: averages, worst turn, best simplification, guard nudges |
 | `/slop reset` | clears this repository's history |
 
 The gauge is an SVG instrument in the desktop Code tab, VS Code and mobile, and a cell raster in the
 terminal. Where no custom drawing is available, `/slop` still prints the full explanation.
 
-**Settings** (`/config`, under slop-o-meter): `mascot` shows or hides Płanetnik.
+**Settings** (`/config`, under slop-o-meter): `guard` is `off`, `nudge` (default) or `strict`; `mascot` shows or
+hides Płanetnik.
 
 **Budget:** an advisory per-turn score, default 40, shown in the pane as over or under. Set `budget` in
 `/config` under slop-o-meter. Slop-O-Meter observes; it never blocks an edit.
@@ -100,6 +122,10 @@ Slop-O-Meter does not send your source code anywhere. By default it:
 - collects no telemetry
 - stores no cloud data
 - approves no tool calls and reads no secrets or environment
+
+It talks to Claude only through the guard, in plain advisory text built from its own measurements, and every
+note it gives Claude is shown to you (a toast for a nudge, a transcript notice for a strict-mode note).
+`guard: off` stops it entirely.
 
 What it does on your machine, all auditable in [`hooks/register.tsx`](hooks/register.tsx) and
 [`src/git.ts`](src/git.ts):

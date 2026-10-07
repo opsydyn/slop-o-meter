@@ -8,16 +8,21 @@ import type { SlopRecord } from '../types/index.d.ts'
 
 const SURFACES = ['terminal', 'desktop'] as const
 const ROOT = '/work/shop'
+/** Each snapshot is a new tree, so a turn's start and end differ. */
+let tick = 0
 
 /**
  * A session in a repository whose stored history ends with `record`: git answers
  * the repository root, the store holds the history, and the session starts.
  */
-async function sessionWith($: Engine, on: On, record?: SlopRecord) {
-  on('process.run', ($, e, next) =>
-    e.argv[0] === 'git' && e.argv[1] === 'rev-parse'
-      ? { value: { exitCode: 0, stdout: `${ROOT}\n${ROOT}/.git\n`, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
-      : next(e))
+async function sessionWith($: Engine, on: On, record?: SlopRecord, numstat = '') {
+  // Git, as far as the mod asks it: the repository root, and a tree id for every snapshot.
+  on('process.run', ($, e) => {
+    const stdout = e.argv[1] === 'rev-parse' ? `${ROOT}\n${ROOT}/.git\n`
+      : e.argv.includes('write-tree') ? `tree${tick++}\n`
+      : e.argv.includes('--numstat') ? numstat : ''
+    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   // The engine's own band, beneath every mod: empty here.
@@ -140,4 +145,74 @@ test('the mascot setting turns Płanetnik off everywhere', { options: { mascot: 
     expect(await band.find({ type: 'Text', text: /Płanetnik/ })).toBeUndefined()
     await band.unmount()
   }
+})
+
+/** Writes a file through the mod's tool.call hook, as Claude's Write tool would, and returns what the model reads beside it. */
+async function write($: Engine, on: On, path: string, content: string) {
+  const ran = await $.tool.call({ tool: 'Write', file_path: `${ROOT}/${path}`, content })
+  return 'context' in ran ? (ran.context ?? []) : []
+}
+
+function agentTurn(on: On) {
+  on('turn.start', ($, e) => ({ turnId: e.turnId }))
+  on('tool.call', { tool: 'Write' }, () => ({ result: { type: 'create', filePath: '', content: '', structuredPatch: [] } }))
+}
+
+test('the guard nudges Claude once, at the third pattern-named abstraction', async ($, on) => {
+  agentTurn(on)
+  await sessionWith($, on)
+  await $.turn.start({ text: 'add a count endpoint', turnId: 't1' })
+  expect(await write($, on, 'src/count/ItemCountService.ts', 'export class ItemCountService {}\n')).toEqual([])
+  expect(await write($, on, 'src/count/ItemCountAdapter.ts', 'export class ItemCountAdapter {}\n')).toEqual([])
+  const third = await write($, on, 'src/count/ItemCountAdapterFactory.ts', 'export class ItemCountAdapterFactory {}\n')
+  expect(third.join('')).toContain('3 pattern-named abstractions')
+  expect(await write($, on, 'src/count/ItemCountRepository.ts', 'export class ItemCountRepository {}\n')).toEqual([])
+})
+
+test('with the guard off, Claude hears nothing', { options: { guard: 'off' } }, async ($, on) => {
+  agentTurn(on)
+  await sessionWith($, on)
+  await $.turn.start({ text: 'add a count endpoint', turnId: 't1' })
+  for (const name of ['AService', 'BAdapter', 'CFactory', 'DRepository']) {
+    expect(await write($, on, `src/${name}.ts`, `export class ${name} {}\n`)).toEqual([])
+  }
+})
+
+test('the Simplify button sends a prompt built from what drove the score', async ($, on) => {
+  let sent = ''
+  on('prompt.submit', ($, e) => {
+    sent = e.text
+    return { text: e.text }
+  })
+  await sessionWith($, on, RECORD)
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await pane.press({ key: 'simplify' })
+  await pane.unmount()
+  expect(sent).toContain('Simplify the change you just made')
+  expect(sent).toContain('abstraction growth: 6 new abstractions')
+})
+
+test('/slop report summarises the session', async ($, on) => {
+  await sessionWith($, on, { ...RECORD, at: Date.now() + 1000 })
+  const ran = await $.command.run({
+    command: 'slop', args: 'report', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 },
+  })
+  expect(ran.text).toContain('SLOP REPORT: this session')
+  expect(ran.text).toContain('worst  87 BIG BALL OF MUD')
+})
+
+test('strict mode never fails a turn, even when its note cannot be appended', { options: { guard: 'strict', budget: 0 } }, async ($, on) => {
+  // This host has no conversation store, so the note is refused here: exactly the case that must stay soft.
+  // The note's text is covered in feedback.spec.ts; its delivery can only be seen in a live session.
+  on('turn.start', ($, e) => ({ turnId: e.turnId }))
+  on('turn.complete', ($, e) => ({ text: e.answer }))
+  // A turn that changed one Python file: measurable surface, no analysis needed.
+  await sessionWith($, on, undefined, '300\t0\tsrc/worker.py\0')
+  await $.turn.start({ text: 'write a worker', turnId: 't1' })
+  const done = await $.turn.complete({ answer: 'done', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+  expect(done.text).toBe('done')
+  const explained = await $.command.run({
+    command: 'slop', args: 'explain', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 },
+  })
+  expect(explained.text).toContain('over by +4')
 })

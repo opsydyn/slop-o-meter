@@ -27,6 +27,18 @@
       "description": "Show Płanetnik, the storm spirit who judges each turn, in the band and the /slop pane.",
       "default": true,
       "required": false
+    },
+    "guard": {
+      "type": "string",
+      "title": "Guard",
+      "description": "off: observe only. nudge: short mid-turn notes to Claude when it piles up pattern-named abstractions, weakens types, or rewrites one file over and over. strict: nudges, plus a note to Claude after any turn over budget. Never blocks an edit; never changes a score.",
+      "options": [
+        "off",
+        "nudge",
+        "strict"
+      ],
+      "default": "nudge",
+      "required": false
     }
   }
 }

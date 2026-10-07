@@ -5,6 +5,7 @@ import { crossedIntoMud, colorOf, gaugeCells, gaugeSvg, sweep } from '../src/gau
 import { diffTrees, findRepo, readFiles, snapshot, type Repo, type Run } from '../src/git.ts'
 import { ANALYZABLE } from '../src/analyze.ts'
 import { CELL_ROWS, planetnikAlt, planetnikCells, planetnikFace, planetnikSvg, WIDTH } from '../src/mascot.ts'
+import { nudgesFor, report, simplifyPrompt, strictNote } from '../src/feedback.ts'
 import { explain, lineDiff, scoreTurn, type FileVersion, type Scored } from '../src/score.ts'
 import type { SlopRecord } from '../types/index.d.ts'
 
@@ -16,6 +17,7 @@ const FRESH_MS = 8000
 const turn = atom({ plugin: 'slop-o-meter', key: 'turn' } as const, null)
 const last = atom({ plugin: 'slop-o-meter', key: 'last' } as const, null)
 const history = atom({ plugin: 'slop-o-meter', key: 'history' } as const, [])
+const since = atom({ plugin: 'slop-o-meter', key: 'since' } as const, null)
 
 let repo: Repo | null | undefined
 /** Width of the terminal gauge as last drawn, so a sweep can blit the mounted raster. */
@@ -89,12 +91,15 @@ const relative = (r: Repo, path: string) =>
 export const register: Register = (on, options) => {
   const budget = typeof options.budget === 'number' ? options.budget : 40
   const mascot = options.mascot !== false
+  /** off: observe only. nudge: mid-turn notes to Claude. strict: also a note after an over-budget turn. */
+  const guard = options.guard === 'off' || options.guard === 'strict' ? options.guard : 'nudge'
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'slop',
-      description: 'Slop-O-Meter: the last turn\'s slop score. Args: explain, diff, history, reset',
+      description: 'Slop-O-Meter: the last turn\'s slop score. Args: explain, diff, history, report, reset',
     })
+    await update($, since, at => at ?? Date.now())
     const r = await getRepo($)
     if (r) {
       const saved = ((await $.store.get(storeKey(r))) ?? []) as SlopRecord[]
@@ -126,7 +131,14 @@ export const register: Register = (on, options) => {
       const now = { ops: was.ops + 1, added: was.added + added, deleted: was.deleted + deleted }
       return { ...t, edits: { ...t.edits, [path]: now } }
     })
-    return result
+    const t = guard === 'off' ? null : await read($, turn)
+    if (!t) return result
+    // The guard: a note only the model reads, beside this tool's result. It never blocks the edit.
+    const { nudges, concepts } = nudgesFor(t, path, before, after)
+    await update($, turn, x => x && { ...x, concepts, nudged: [...(x.nudged ?? []), ...nudges.map(n => n.signal)] })
+    if (nudges.length === 0) return result
+    $.ui.toast(`Slop-O-Meter nudged Claude: ${nudges.map(n => n.signal).join(', ')}`)
+    return { ...result, context: [...(result.context ?? []), ...nudges.map(n => n.text)] }
   })
 
   on('turn.complete', async ($, e, next) => {
@@ -144,7 +156,7 @@ export const register: Register = (on, options) => {
     const files = await readVersions(run, r, t.baseline, final, changes)
     const scored = scoreTurn({ changes, edits: t.edits, files })
     const previous = await read($, last)
-    const record = toRecord(scored, changes, previous)
+    const record = toRecord(scored, changes, previous, t.nudged ?? [])
     const all = [...(await read($, history)), record].slice(-HISTORY_LIMIT)
     await update($, history, () => all)
     await update($, last, () => record)
@@ -154,7 +166,17 @@ export const register: Register = (on, options) => {
     if (crossedIntoMud(record.score, previous?.score ?? null)) {
       $.ui.toast(`⚠ BIG BALL OF MUD: slop score ${record.score}. /slop explain says why.`)
     }
-    return next(e)
+    const done = await next(e)
+    const note = guard === 'strict' ? strictNote(record, budget) : null
+    if (note) {
+      // The model reads the note at the start of the next turn; the notice tells the person it was left.
+      // Either may be refused (another plugin can deny a row): feedback is never worth failing the turn.
+      const told = await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: note }] } }).catch(() => null)
+      if (told && !('deny' in told && told.deny)) {
+        await $.session.append({ message: { type: 'system', content: [{ type: 'text', text: `Slop-O-Meter left Claude a strict-mode note: the last change scored ${record.score}, over the budget of ${budget}.` }] } }).catch(() => null)
+      }
+    }
+    return done
   })
 
   on('command.run', { command: 'slop' }, async ($, e) => {
@@ -170,6 +192,10 @@ export const register: Register = (on, options) => {
     if (arg === 'history') {
       const rows = (await read($, history)).slice(-20)
       return { text: rows.length ? rows.map(h => `${new Date(h.at).toLocaleTimeString()}  ${String(h.score).padStart(3)}  ${h.state}`).join('\n') : 'No scored turns yet.' }
+    }
+    if (arg === 'report') {
+      const from = (await read($, since)) ?? 0
+      return { text: report((await read($, history)).filter(h => h.at >= from), budget) }
     }
     if (!record) return { text: 'Slop-O-Meter: no scored turns yet.' }
     if (arg === 'diff') {
@@ -211,7 +237,7 @@ export const register: Register = (on, options) => {
     const record = await read($, last)
     const rows = await read($, history)
     const width = e.props.bodyColumns
-    const { Box, Text } = $.ui.resolve(e)
+    const { Box, Button, Text } = $.ui.resolve(e)
     if (!record) return <Text dimColor>No scored turns yet. The meter scores each turn that changes code.</Text>
 
     const color = colorOf(record.score)
@@ -262,6 +288,17 @@ export const register: Register = (on, options) => {
         {gauge}
         <Text> </Text>
         <Text>budget {budget}  <Text color={record.score > budget ? '#f0883e' : '#3fb950'}>{overBudget(record.score, budget)}</Text></Text>
+        <Text dimColor>
+          guard {guard}{record.nudges?.length ? `  ·  nudged Claude this turn: ${record.nudges.join(', ')}` : ''}
+        </Text>
+        {record.score > 20 && (
+          <Button
+            key="simplify"
+            label="Simplify this change"
+            hotkey="s"
+            onPress={() => $.prompt.submit({ text: simplifyPrompt(record) })}
+          />
+        )}
         <Text> </Text>
         <Text bold>score breakdown</Text>
         {ranked.map(c => (
@@ -289,8 +326,9 @@ export const register: Register = (on, options) => {
   })
 }
 
-function toRecord(s: Scored, changes: SlopRecord['changes'], previous: SlopRecord | null): SlopRecord {
+function toRecord(s: Scored, changes: SlopRecord['changes'], previous: SlopRecord | null, nudges: string[]): SlopRecord {
   return {
+    nudges,
     at: Date.now(),
     score: s.score,
     state: s.state,

@@ -103,14 +103,17 @@ export function churn(changes: FileChange[], edits: EditActivity): Component {
   }
   const wasted = files.reduce((n, [path, e]) => n + Math.max(0, e.added + e.deleted - (finalOf.get(path) ?? 0)), 0)
   const survival = 1 - wasted / volume
-  const abandoned = files.filter(([path]) => !finalOf.has(path)).length
-  const rewritten = files.filter(([, e]) => e.ops >= 6).length
+  const abandonedPaths = files.filter(([path]) => !finalOf.has(path)).map(([path]) => path)
+  const rewrittenPaths = files.filter(([, e]) => e.ops >= 6).map(([path]) => path)
+  const abandoned = abandonedPaths.length
+  const rewritten = rewrittenPaths.length
   const normalized = saturate(wasted, 80) * Math.sqrt(1 - survival)
   const parts = [`${Math.round((1 - survival) * 100)}% of ${volume} edited lines did not survive`]
   if (abandoned) parts.push(`${plural(abandoned, 'file')} edited then reverted or deleted`)
   if (rewritten) parts.push(`${plural(rewritten, 'file')} edited 6+ times`)
   return component('churn', 'agent churn', normalized,
-    { volume, wasted, ops, survival: round(survival), abandoned, rewritten }, parts.join('; '))
+    { volume, wasted, ops, survival: round(survival), abandoned, rewritten }, parts.join('; '),
+    [...abandonedPaths, ...rewrittenPaths])
 }
 
 function component(
@@ -119,11 +122,13 @@ function component(
   normalized: number | null,
   raw: Record<string, number>,
   reason: string,
+  /** The names or paths the reason is about, for feedback that can point at them. */
+  subjects: string[] = [],
 ): Component {
   const weight = WEIGHTS[key]
   // Below zero only for metrics that reward simplification, and by at most half a weight.
   const n = normalized === null ? null : round(Math.min(1, Math.max(-0.5, normalized)))
-  return { key, label, weight, normalized: n, contribution: 0, raw, reason }
+  return { key, label, weight, normalized: n, contribution: 0, raw, reason, ...(subjects.length ? { subjects } : {}) }
 }
 
 const round = (x: number) => Math.round(x * 1000) / 1000
@@ -234,7 +239,7 @@ function behaviourOf(code: Pair[]): number {
   return Math.max(1, branches + newTests + lines / 25)
 }
 
-const PATTERN = /(Factory|Service|Repository|Repo|Adapter|Wrapper|Manager|Provider|Handler|Builder|Strategy|Helper|Helpers|Util|Utils|Base|Abstract|Impl|Interface|Config|Facade|Proxy|Registry|Orchestrator|Coordinator)$/
+export const PATTERN = /(Factory|Service|Repository|Repo|Adapter|Wrapper|Manager|Provider|Handler|Builder|Strategy|Helper|Helpers|Util|Utils|Base|Abstract|Impl|Interface|Config|Facade|Proxy|Registry|Orchestrator|Coordinator)$/
 const WEIGHT_OF = { class: 1, interface: 1, enum: 1, type: 0.5 }
 type Concept = { name: string; kind: keyof typeof WEIGHT_OF; exported: boolean; consumers: number }
 
@@ -286,7 +291,8 @@ export function abstractions(code: Pair[], measurable: boolean): Component {
   if (goneModules) parts.push(`${plural(goneModules, 'module')} deleted`)
   return component('abstractions', 'abstraction growth', measurable ? normalized : null,
     { added: added.length, singleUse: singleUse.length, patternNamed: patterned.length, newModules, removed: removed.length + goneModules, perBehaviour: round(perBehaviour) },
-    parts.join(', ') || 'no new abstractions')
+    parts.join(', ') || 'no new abstractions',
+    [...new Set([...singleUse, ...patterned].map(d => d.name))])
 }
 
 export function amplification(code: Pair[], measurable: boolean): Component {
@@ -318,8 +324,11 @@ export function typeWeakening(code: Pair[], measurable: boolean): Component {
   const parts = ([[any, '`any`'], [casts, '`as` cast'], [double, 'double cast'], [suppress, 'compiler suppression'], [nonNull, 'non-null assertion']] as const)
     .filter(([n]) => n !== 0)
     .map(([n, what]) => `${n > 0 ? '+' : ''}${n} ${what}${Math.abs(n) === 1 ? '' : 's'}`)
+  const weakenedIn = prod
+    .filter(p => ['any', 'doubleCasts', 'suppressions'].some(k => (p.after[k as 'any'] as number) > (p.before[k as 'any'] as number)))
+    .map(p => p.path)
   return component('typeWeakening', 'type weakening', measurable ? signed(weakened, 3) : null,
-    { any, casts, doubleCasts: double, suppressions: suppress, nonNull }, parts.join(', ') || 'no change in type safety')
+    { any, casts, doubleCasts: double, suppressions: suppress, nonNull }, parts.join(', ') || 'no change in type safety', weakenedIn)
 }
 
 const RUNTIME = ['dependencies', 'peerDependencies', 'optionalDependencies']

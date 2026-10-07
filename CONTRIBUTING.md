@@ -31,6 +31,7 @@ CI typechecks everything except the hooks module (`tsconfig.ci.json`), and valid
 | `src/analyze.ts` | the JS/TS lexer and the per-file facts |
 | `src/score.ts` | metrics, the evidence combination, explanations |
 | `src/gauge.ts` | the SVG gauge and terminal raster, as pure functions |
+| `src/feedback.ts` | the guard: mid-turn nudges, the strict-mode note, the Simplify prompt, `/slop report` |
 | `src/mascot.ts` | Płanetnik: one pixel grid per score, drawn as SVG and as terminal cells |
 | `types/index.d.ts` | the mod's state contract and shared types |
 | `tests/fixtures/scenarios.ts` | whole-turn scenarios; two are recorded live experiments |
