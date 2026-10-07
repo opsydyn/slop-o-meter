@@ -83,6 +83,38 @@ type-weakening nudge in each t1-nudge run, delivered as a post-tool note); the a
 the pattern list, flag type weakening once per file rather than once per turn, add documentation sprawl as a
 measured signal with its own nudge, then rerun with at least four runs per cell.
 
+### Round 2: after widening the triggers
+
+Same three prompts and model, four runs per cell (24 runs), with the changes above: the abstraction nudge also
+fires at six new types of any name, Validator/Calculator/… join the pattern list, type weakening is flagged per
+file, and documentation sprawl is measured and nudged. (Scores are not comparable with round 1: the scoring
+gained a component in between. Compare arms within a round.)
+
+| Task | off | nudge | guard spoke? |
+|---|---|---|---|
+| t1 discount codes | 54, 57, 60, 61 (58.0) | 54, 52, 57, 50 (53.2) | every run: abstractions, docs, types |
+| t2 export | 20, 19, 19, 16 (18.5) | 13, 17, 21, 14 (16.2) | never |
+| t3 rate limiting | 19, 17, 19, 20 (18.8) | 13, 20, 21, 16 (17.5) | never |
+
+t2 and t3 are the control: the guard never spoke, so both arms ran identically and their gap (1 to 2 points)
+is the noise. t1, where it spoke, moved further, and in the components the nudges name:
+
+| t1 | off | nudge |
+|---|---|---|
+| new Markdown files | 2, 3, 3, 5 | 2, 3, 2, 1 |
+| new types and classes | 11, 13, 12, 12 | 12, 6, 8, 11 |
+| `any` added | 16, 10, 6, 7 | 0, 0, 0, 16 |
+
+**Reading it honestly:** a modest, consistent improvement where the guard has something to say: about 8% off
+the score, a third fewer unrequested documents, a quarter fewer new types, and no `any` in three of four runs.
+It is about twice the noise floor, not proof; four runs per cell is still small. Two of the clean-typed runs
+were never nudged about types, so not every gain is attributable to the nudge it resembles.
+
+**Why the effect is modest:** the agents plan the structure first and write it file after file; by the sixth
+new type most of the design is on disk. Nudges correct the rest of the turn, not the plan. The next experiment
+is earlier feedback: a one-line notice at session start that the meter is measuring, and strict mode's
+between-turn note, against the same prompts.
+
 ## Fixture scenarios (`tests/fixtures/scenarios.ts`)
 
 The same request, "add a search endpoint", implemented several ways, plus the other experiments from

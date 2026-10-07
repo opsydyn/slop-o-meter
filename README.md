@@ -21,6 +21,8 @@ repository, a service, a wrapper, an adapter and a factory scored **75, HEAVY SL
 - **agent churn:** how much of the agent's own editing was thrown away before the turn ended
 - **type weakening:** `any`, casts, double casts, `@ts-ignore`, non-null assertions
 - **dependency growth**, **duplication delta** and **comment noise** (comments that restate the code)
+- **documentation sprawl:** new Markdown files nobody asked for (the `IMPLEMENTATION_SUMMARY.md` genre); docs the
+  request asked for are never counted
 - **tests:** a bounded risk-reduction modifier; tests never erase structural slop
 
 Every score explains itself. `/slop` answers "why is this 67?" with the points each metric contributed and a
@@ -53,10 +55,11 @@ Crossing into Big Ball of Mud slams the needle into the red once; staying there 
 A meter that only you can see tells you about slop after the fact. The guard turns the same measurements
 into feedback for Claude, while it works:
 
-- **Mid-turn nudges** (`guard: nudge`, the default). When a turn piles up pattern-named abstractions (the third
-  `…Service`, `…Adapter` or `…Factory`), adds `any`, double casts or `@ts-ignore`, or edits one file for the fifth
-  time, Claude gets one short note beside that tool's result, naming what it measured. Each signal speaks at most
-  once a turn, and you see a toast whenever Claude is nudged.
+- **Mid-turn nudges** (`guard: nudge`, the default). When a turn piles up abstractions (a third `…Service`,
+  `…Validator` or `…Factory`, or a sixth new type of any name), adds `any`, double casts or `@ts-ignore` to a file,
+  writes a second unrequested Markdown file, or edits one file for the fifth time, Claude gets one short note
+  beside that tool's result, naming what it measured. Each nudge is said once a turn (type weakening once per
+  file, up to three), and you see a toast whenever Claude is nudged.
 - **Strict mode** (`guard: strict`). After a turn over your budget, Claude gets a note for its next turn saying
   what drove the score, and the transcript shows you that the note was left.
 - **Simplify this change.** A button in the `/slop` pane that asks Claude to simplify the last change, pointing
