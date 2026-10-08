@@ -115,6 +115,44 @@ new type most of the design is on disk. Nudges correct the rest of the turn, not
 is earlier feedback: a one-line notice at session start that the meter is measuring, and strict mode's
 between-turn note, against the same prompts.
 
+### Round 3: briefing Claude up front
+
+A third arm: the same nudges, plus a context block at the start of the session saying what is measured, the
+budget, and never to cut scope, tests or correctness for a lower score. Three arms run side by side, same day:
+off, nudge (the round-2 code), nudge and briefing. Four runs per cell, 36 runs. The briefing was first checked
+live: asked what it knew about how its changes would be measured, the agent quoted it word for word.
+
+| Task | off | nudge | nudge + briefing |
+|---|---|---|---|
+| t1 discount codes | 48, 40, 32, 65 (46.2) | 43, 62, 61, 30 (49.0) | 45, 68, 49, 47 (52.2) |
+| t2 export | 10, 21, 14, 29 (18.5) | 17, 16, 24, 11 (17.0) | 39, 13, 18, 13 (20.8) |
+| t3 rate limiting | 18, 18, 21, 18 (18.8) | 12, 18, 19, 18 (16.8) | 12, 16, 27, 2 (14.2) |
+
+| t1, what the guard targets | off | nudge | nudge + briefing |
+|---|---|---|---|
+| new Markdown files | 3.0 | 1.8 | 1.0 |
+| `any` added | 2.8 | 1.0 | 0.2 |
+| new types and classes | 9.2 | 9.8 | 12.2 |
+
+**This round overturns the headline of round 2.** On the total score no arm wins: t1 alone ranged from 32 to 65
+under identical conditions, and round 2's 58 → 53 reversed here. Pooling rounds 2 and 3 for t1: off 52.1,
+nudge 51.1. The total score is too noisy, run to run, to show the guard's effect at these sizes.
+
+**What does hold, in both rounds, is the guard changing the behaviours it names:**
+
+- unrequested Markdown files: 3.1 → 1.9 with nudges (rounds 2 and 3 pooled) → 1.0 with the briefing as well
+- `any` added: down sharply with nudges in both rounds, and to almost none with the briefing
+
+**And a trade-off:** told up front to avoid weakening types, agents wrote *more* types (9.2 → 12.2). Spelling out
+an input and result interface for every function is its own sprawl, and the abstraction metric counts it. The
+guard currently pulls those two signals against each other.
+
+**Conclusions.** Keep the briefing: it is cheap, it lands, and it moves the targeted behaviours furthest. Stop
+reading single scores as verdicts: the same prompt varies by tens of points, so the meter's value is in its
+named reasons and in trends across turns, and the README should say so. Next for the guard, when we return to it:
+let the briefing and the type nudge point at *existing or inferred* types rather than new declarations, and
+measure behaviours (docs, `any`, new types), not the total score.
+
 ## Fixture scenarios (`tests/fixtures/scenarios.ts`)
 
 The same request, "add a search endpoint", implemented several ways, plus the other experiments from

@@ -155,6 +155,10 @@ with a small built-in lexer; when a turn changes only other languages they are r
 - Very large changes are partly skipped: more than 60 analysable files, files over 400 KB, or over 5,000 changed lines.
 - The weights are a hypothesis being calibrated by dogfooding. Expect relative ordering to be more reliable
   than any exact number. [DOGFOOD.md](DOGFOOD.md) records every calibration and why.
+- One turn's score is not a verdict. The same prompt, run four times by the same model, scored anywhere from 32
+  to 65 in our tests: agents vary. Read the reasons, and the trend across turns (`/slop report`).
+- The guard reliably changes the behaviours it names (fewer unrequested documents, far less `any`), but in our
+  A/B tests that did not reliably lower the total score. See DOGFOOD.md for the numbers.
 
 ## The meter watches itself
 
