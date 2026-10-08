@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { nudgesFor, report, simplifyPrompt, strictNote } from '../src/feedback.ts'
+import { briefing, nudgesFor, report, simplifyPrompt, strictNote } from '../src/feedback.ts'
 import type { SlopRecord, SlopTurn } from '../types/index.d.ts'
 
 const turn = (over: Partial<SlopTurn> = {}): SlopTurn => ({ baseline: 'x', edits: {}, ...over })
@@ -130,5 +130,14 @@ describe('the session report', () => {
     expect(text).toContain('best simplification  -60 to 13')
     expect(text).toContain('trend  13 → 73 → 13')
     expect(text).toContain('guard nudges  1 (abstractions 1)')
+  })
+})
+
+describe('the briefing', () => {
+  test('says what is measured, the budget, and not to game it', () => {
+    const text = briefing(40)
+    expect(text).toContain('Budget: 40 per turn')
+    expect(text).toContain('new documentation files the request did not ask for')
+    expect(text).toContain('Never cut requested scope, tests or correctness to lower the score.')
   })
 })

@@ -216,3 +216,19 @@ test('strict mode never fails a turn, even when its note cannot be appended', { 
   })
   expect(explained.text).toContain('over by +4')
 })
+
+test('with the guard on, Claude is briefed in a context block; with it off, not', async ($, on) => {
+  on('prompt.context', ($, e) => ({ blocks: e.blocks }))
+  await sessionWith($, on)
+  const context = await $.prompt.context({ blocks: [{ name: 'currentDate', text: '2026-10-08' }] })
+  const block = context.blocks.find(b => b.name === 'slopOMeter')
+  expect(block?.text).toContain('Slop-O-Meter is measuring each change')
+  expect(context.blocks[0]?.name).toBe('currentDate')
+})
+
+test('the guard off means no briefing', { options: { guard: 'off' } }, async ($, on) => {
+  on('prompt.context', ($, e) => ({ blocks: e.blocks }))
+  await sessionWith($, on)
+  const context = await $.prompt.context({ blocks: [] })
+  expect(context.blocks.map(b => b.name)).not.toContain('slopOMeter')
+})

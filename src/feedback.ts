@@ -84,6 +84,20 @@ export function nudgesFor(turn: SlopTurn, path: string, before: string | null, a
   return { nudges, concepts, docs }
 }
 
+/**
+ * The briefing Claude reads at the start of a session while the guard is on: what is measured, before
+ * anything is designed, so the plan can avoid it rather than a nudge correcting it halfway through.
+ */
+export function briefing(budget: number): string {
+  return [
+    'Slop-O-Meter is measuring each change in this session, deterministically, from the diff and your edits. It counts:',
+    'how widely a change spreads; new types, classes and layers relative to the behaviour added; type weakening',
+    '(any, casts, @ts-ignore); new documentation files the request did not ask for; and code written then rewritten',
+    `or thrown away. Budget: ${budget} per turn; lower is better. Prefer direct implementations, existing code and`,
+    'types, and a summary in your reply over new files. Never cut requested scope, tests or correctness to lower the score.',
+  ].join(' ')
+}
+
 const drivers = (record: SlopRecord) =>
   [...record.components].filter(c => c.contribution > 0).sort((a, b) => b.contribution - a.contribution).slice(0, 3)
 

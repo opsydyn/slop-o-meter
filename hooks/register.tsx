@@ -5,7 +5,7 @@ import { crossedIntoMud, colorOf, gaugeCells, gaugeSvg, sweep } from '../src/gau
 import { diffTrees, findRepo, readFiles, snapshot, type Repo, type Run } from '../src/git.ts'
 import { ANALYZABLE } from '../src/analyze.ts'
 import { CELL_ROWS, planetnikAlt, planetnikCells, planetnikFace, planetnikSvg, WIDTH } from '../src/mascot.ts'
-import { nudgesFor, report, simplifyPrompt, strictNote } from '../src/feedback.ts'
+import { briefing, nudgesFor, report, simplifyPrompt, strictNote } from '../src/feedback.ts'
 import { explain, lineDiff, scoreTurn, type FileVersion, type Scored } from '../src/score.ts'
 import type { SlopRecord } from '../types/index.d.ts'
 
@@ -107,6 +107,13 @@ export const register: Register = (on, options) => {
       await update($, last, () => saved.at(-1) ?? null)
     }
     return next(e)
+  })
+
+  // While the guard is on, Claude is told up front what is measured, in a context block of its own.
+  on('prompt.context', async ($, e, next) => {
+    const context = await next(e)
+    if (guard === 'off') return context
+    return { ...context, blocks: [...context.blocks, { name: 'slopOMeter', text: briefing(budget) }] }
   })
 
   on('turn.start', async ($, e, next) => {
