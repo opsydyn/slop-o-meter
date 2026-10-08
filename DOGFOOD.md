@@ -151,7 +151,31 @@ guard currently pulls those two signals against each other.
 reading single scores as verdicts: the same prompt varies by tens of points, so the meter's value is in its
 named reasons and in trends across turns, and the README should say so. Next for the guard, when we return to it:
 let the briefing and the type nudge point at *existing or inferred* types rather than new declarations, and
-measure behaviours (docs, `any`, new types), not the total score.
+measure behaviours (docs, `any`, new types), not the total score. (Done in round 4.)
+
+### Round 4: resolving the type-sprawl trade-off
+
+Round 3 found the guard pulling two signals against each other: told not to weaken types, agents declared a type
+for every input and result, and the meter counted that as sprawl. Two changes:
+
+- **The metric:** interfaces and type aliases are data shapes, half the weight of a class or enum, and not the
+  single-consumer smell unless pattern-named (a `…Config` or `…Repository` shape still is).
+- **The guidance:** the briefing and the type nudge now say *reuse existing types and let TypeScript infer the
+  rest; a declared type for every input and result is sprawl, and so is `any`*, instead of only "avoid `any`".
+
+Discount codes, five runs per arm, both arms rescored with the same (new) scoring:
+
+| | briefing v1 | briefing v2 |
+|---|---|---|
+| total | 25, 53, 46, 28, 68 (44.0) | 51, 56, 37, 54, 39 (47.4) |
+| new data shapes | 8, 9, 6, 11, 9 (8.6) | 10, 5, 5, 8, 8 (7.2) |
+| new classes and enums | 0, 0, 0, 0, 10 (2.0) | 2, 0, 1, 2, 0 (1.0) |
+| `any` added | 0, 1, 0, 0, 11 (2.4) | 0, 0, 0, 0, 0 (0.0) |
+| new Markdown files | 1, 1, 0, 0, 0 | 1, 2, 0, 1, 1 |
+
+**The trade-off is gone in this sample:** no `any` in any of the five runs *and* fewer new types, rather than
+one bought with the other. Totals are again noise (v1 spans 25 to 68). Five runs per arm is small; the
+direction matches what the guidance asks for.
 
 ## Fixture scenarios (`tests/fixtures/scenarios.ts`)
 
