@@ -23,7 +23,7 @@ describe('mid-turn nudges', () => {
   })
 
   test('plain names and test files are not abstraction smells', () => {
-    const t = turn({ concepts: ['AService', 'BFactory'] })
+    const t = turn({ concepts: [{ name: 'AService', shape: false }, { name: 'BFactory', shape: false }] })
     expect(nudgesFor(t, 'src/search.ts', '', klass('Search')).nudges).toEqual([])
     expect(nudgesFor(t, 'tests/fakes.ts', '', klass('FakeFactory')).nudges).toEqual([])
   })
@@ -34,20 +34,37 @@ describe('mid-turn nudges', () => {
     expect(n!.text).toContain('`any` and a double cast to src/a.ts')
   })
 
-  test('type sprawl of any name: one nudge at the sixth new type', () => {
+  /** Writes one declaration per file through the guard, as a turn would, and returns everything it said. */
+  const declare = (decls: string[]) => {
     let t = turn()
     const said: string[] = []
-    for (const name of ['Discount', 'CreateDiscountInput', 'CreateDiscountResult', 'UpdateDiscountInput', 'UpdateDiscountResult', 'ValidationResult', 'PricingResult']) {
-      const out = nudgesFor(t, `src/discounts/${name}.ts`, null, `export interface ${name} { id: string }\n`)
+    for (const decl of decls) {
+      const name = decl.split(' ')[2]!
+      const out = nudgesFor(t, `src/discounts/${name}.ts`, null, `${decl} { id: string }\n`)
       t = { ...t, concepts: out.concepts, nudged: [...(t.nudged ?? []), ...out.nudges.map(n => n.key)] }
       said.push(...out.nudges.map(n => n.text))
     }
+    return said
+  }
+  const shapes = ['Discount', 'CreateDiscountInput', 'CreateDiscountResult', 'UpdateDiscountInput', 'UpdateDiscountResult',
+    'ValidationResult', 'PricingResult', 'DiscountQuery', 'DiscountPage', 'AppliedDiscount', 'DiscountError', 'ExpiryWindow']
+
+  test('six new classes of any name earn one nudge', () => {
+    const said = declare(['Cart', 'Coupon', 'Ledger', 'Pricing', 'Expiry', 'Totals', 'Rounding'].map(n => `export class ${n}`))
     expect(said).toHaveLength(1)
-    expect(said[0]).toContain('6 new types and classes (Discount, CreateDiscountInput')
+    expect(said[0]).toContain('6 new types and classes (Cart, Coupon')
+    expect(said[0]).toContain('let TypeScript infer the rest')
+  })
+
+  test('data shapes count half: seven interfaces pass, the twelfth is sprawl', () => {
+    expect(declare(shapes.slice(0, 7).map(n => `export interface ${n}`))).toEqual([])
+    const said = declare(shapes.map(n => `export interface ${n}`))
+    expect(said).toHaveLength(1)
+    expect(said[0]).toContain('12 new types and classes')
   })
 
   test('validators and calculators count as pattern names now', () => {
-    const out = nudgesFor(turn({ concepts: ['DiscountValidator', 'DiscountCalculator'] }), 'src/d/DiscountService.ts', null, klass('DiscountService'))
+    const out = nudgesFor(turn({ concepts: [{ name: 'DiscountValidator', shape: false }, { name: 'DiscountCalculator', shape: false }] }), 'src/d/DiscountService.ts', null, klass('DiscountService'))
     expect(out.nudges.map(n => n.signal)).toEqual(['abstractions'])
   })
 
@@ -138,6 +155,7 @@ describe('the briefing', () => {
     const text = briefing(40)
     expect(text).toContain('Budget: 40 per turn')
     expect(text).toContain('new documentation files the request did not ask for')
+    expect(text).toContain('let TypeScript infer the rest: a declared type for every input and result is sprawl')
     expect(text).toContain('Never cut requested scope, tests or correctness to lower the score.')
   })
 })

@@ -43,8 +43,8 @@ export type SlopTurn = {
   edits: SlopEditActivity
   /** What the person asked for, so feedback can tell requested work from unrequested. */
   request?: string
-  /** New classes, interfaces, enums and types the turn has introduced so far. */
-  concepts?: string[]
+  /** New classes, enums, interfaces and types the turn has introduced so far; shapes are interfaces and types. */
+  concepts?: { name: string; shape: boolean }[]
   /** New Markdown files the turn has written so far. */
   docs?: string[]
   /** What the guard has already nudged Claude about this turn (a signal, or a signal and a file). */

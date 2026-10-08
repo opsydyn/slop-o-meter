@@ -233,7 +233,7 @@ export const register: Register = (on, options) => {
         ) : (
           <Text dimColor>— no scored turns yet</Text>
         )}
-        {mascot && record && <Text color="#a39b8e">  Płanetnik {planetnikFace(record.score)}</Text>}
+        {mascot && record && <Text color="#a39b8e">  {planetnikFace(record.score)}</Text>}
         {t && <Text dimColor>  · analysing… {ops} edits in {files} files</Text>}
       </Box>
       {below}

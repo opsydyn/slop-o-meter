@@ -9,7 +9,7 @@ import type { SlopComponent, SlopRecord, SlopTurn } from '../types/index.d.ts'
 const SIGNED = 'Slop-O-Meter (advisory, from measurements):'
 /** Pattern-named abstractions (…Service, …Factory, …Validator) a turn may add before the guard says so. */
 const PATTERNED_BEFORE_NUDGE = 3
-/** New types and classes of any name a turn may add before the guard says so. */
+/** New types of any name a turn may add before the guard says so: classes count 1, data shapes ½. */
 const TYPES_BEFORE_NUDGE = 6
 /** How many edits to one file before the guard asks the agent to settle on an approach. */
 const EDITS_BEFORE_NUDGE = 5
@@ -25,7 +25,8 @@ export type Nudge = {
   text: string
 }
 
-export type Guarded = { nudges: Nudge[]; concepts: string[]; docs: string[] }
+type Concept = { name: string; shape: boolean }
+export type Guarded = { nudges: Nudge[]; concepts: Concept[]; docs: string[] }
 
 const list = (names: string[]) => names.slice(0, 5).join(', ') + (names.length > 5 ? ', …' : '')
 const MARKDOWN = /\.(md|mdx|rst)$/i
@@ -47,16 +48,20 @@ export function nudgesFor(turn: SlopTurn, path: string, before: string | null, a
   if (isProduction(path) && ANALYZABLE.test(path)) {
     const was = analyze(before ?? '')
     const now = analyze(after)
-    const had = new Set(was.declarations.map(d => d.name))
-    const added = now.declarations.filter(d => d.kind !== 'function' && !had.has(d.name)).map(d => d.name)
-    concepts = [...new Set([...concepts, ...added])]
-    const patterned = concepts.filter(name => PATTERN.test(name))
+    const known = new Set([...was.declarations.map(d => d.name), ...concepts.map(c => c.name)])
+    const added = now.declarations
+      .filter(d => d.kind !== 'function' && !known.has(d.name))
+      .map(d => ({ name: d.name, shape: d.kind === 'interface' || d.kind === 'type' }))
+    concepts = [...concepts, ...added]
+    const names = concepts.map(c => c.name)
+    const patterned = names.filter(name => PATTERN.test(name))
+    const weight = concepts.reduce((n, c) => n + (c.shape ? 0.5 : 1), 0)
     if (added.length > 0 && patterned.length >= PATTERNED_BEFORE_NUDGE) {
       say('abstractions', 'abstractions', `this turn has introduced ${patterned.length} pattern-named abstractions (${list(patterned)}). ` +
         'Each layer should be required by the task; where one will do, prefer a direct implementation and existing code.')
-    } else if (added.length > 0 && concepts.length >= TYPES_BEFORE_NUDGE) {
-      say('abstractions', 'abstractions', `this turn has introduced ${concepts.length} new types and classes (${list(concepts)}). ` +
-        'Prefer fewer, existing or inferred types; a separate input or result type for every function is rarely needed.')
+    } else if (added.length > 0 && weight >= TYPES_BEFORE_NUDGE) {
+      say('abstractions', 'abstractions', `this turn has introduced ${concepts.length} new types and classes (${list(names)}). ` +
+        'Reuse existing types and let TypeScript infer the rest; declare a type only where it is shared.')
     }
     const weakening = [
       [now.any - was.any, '`any`'],
@@ -65,7 +70,7 @@ export function nudgesFor(turn: SlopTurn, path: string, before: string | null, a
     ].filter(([n]) => (n as number) > 0).map(([, what]) => what)
     const typeFiles = [...nudged].filter(k => k.startsWith('types:')).length
     if (weakening.length > 0 && typeFiles < TYPE_FILES_PER_TURN) {
-      say('types', `types:${path}`, `this edit adds ${weakening.join(' and ')} to ${path}. Prefer a real type over weakening the checker.`)
+      say('types', `types:${path}`, `this edit adds ${weakening.join(' and ')} to ${path}. Use an existing or inferred type instead; declare a new one only if it will be shared.`)
     }
   }
 
@@ -93,8 +98,9 @@ export function briefing(budget: number): string {
     'Slop-O-Meter is measuring each change in this session, deterministically, from the diff and your edits. It counts:',
     'how widely a change spreads; new types, classes and layers relative to the behaviour added; type weakening',
     '(any, casts, @ts-ignore); new documentation files the request did not ask for; and code written then rewritten',
-    `or thrown away. Budget: ${budget} per turn; lower is better. Prefer direct implementations, existing code and`,
-    'types, and a summary in your reply over new files. Never cut requested scope, tests or correctness to lower the score.',
+    `or thrown away. Budget: ${budget} per turn; lower is better. Prefer direct implementations and existing code.`,
+    'Reuse existing types and let TypeScript infer the rest: a declared type for every input and result is sprawl, and',
+    'so is `any`. Put summaries in your reply, not new files. Never cut requested scope, tests or correctness to lower the score.',
   ].join(' ')
 }
 

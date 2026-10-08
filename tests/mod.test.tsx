@@ -130,7 +130,8 @@ test('Płanetnik judges the turn beside the gauge, in the band, and on the termi
   expect(await terminal.find({ type: 'Raster', key: 'planetnik' })).toBeDefined()
   await terminal.unmount()
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect(await band.find({ type: 'Text', text: /Płanetnik \(╬ಠ益ಠ\)/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /^\s*\(╬ಠ益ಠ\)$/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /Płanetnik/ })).toBeUndefined()
   await band.unmount()
 })
 
@@ -142,7 +143,7 @@ test('the mascot setting turns Płanetnik off everywhere', { options: { mascot: 
     expect((await pane.findAll({ type: 'Svg' })).map(svg => String(svg.props.alt))).not.toContain('Płanetnik: a full storm, eyes blazing')
     await pane.unmount()
     const band = await $.ui.mount({ ...BAND, surface })
-    expect(await band.find({ type: 'Text', text: /Płanetnik/ })).toBeUndefined()
+    expect(await band.find({ type: 'Text', text: /\(╬ಠ益ಠ\)/ })).toBeUndefined()
     await band.unmount()
   }
 })

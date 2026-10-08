@@ -188,3 +188,20 @@ describe('documentation sprawl', () => {
     expect(docSprawl([{ path: 'README.md', added: 40, deleted: 2 }, { path: 'CHANGELOG.md', added: 5, deleted: 0 }], 'x').normalized).toBe(0)
   })
 })
+
+describe('abstraction growth', () => {
+  const turnWith = (decl: string, use: string) => scoreTurn({
+    changes: [{ path: 'src/discount.ts', added: 6, deleted: 0, isNew: true }],
+    edits: {},
+    files: [{ path: 'src/discount.ts', before: null, after: `${decl}\nexport function apply(x: number) {\n  return ${use}\n}\n` }],
+  }).components.find(c => c.key === 'abstractions')!
+
+  test('a data shape used once is not the single-consumer smell; a class used once is', () => {
+    expect(turnWith('export interface ApplyResult { total: number }', 'x as unknown as ApplyResult').raw.singleUse).toBe(0)
+    expect(turnWith('export class Applier { run() { return 1 } }', 'new Applier().run() + x').raw.singleUse).toBe(1)
+  })
+
+  test('a …Config or …Repository shape used once still is', () => {
+    expect(turnWith('export interface DiscountConfig { rate: number }', 'x as unknown as DiscountConfig').raw.singleUse).toBe(1)
+  })
+})

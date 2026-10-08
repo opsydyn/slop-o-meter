@@ -244,7 +244,8 @@ function behaviourOf(code: Pair[]): number {
 }
 
 export const PATTERN = /(Factory|Service|Repository|Repo|Adapter|Wrapper|Manager|Provider|Handler|Builder|Strategy|Helper|Helpers|Util|Utils|Base|Abstract|Impl|Interface|Config|Facade|Proxy|Registry|Orchestrator|Coordinator|Validator|Calculator|Processor|Controller|Engine|Generator|Exporter|Serializer|Resolver|Dispatcher|Formatter)$/
-const WEIGHT_OF = { class: 1, interface: 1, enum: 1, type: 0.5 }
+/** Classes and enums are abstractions; interfaces and type aliases are data shapes, half as heavy. */
+const WEIGHT_OF = { class: 1, enum: 1, interface: 0.5, type: 0.5 }
 type Concept = { name: string; kind: keyof typeof WEIGHT_OF; exported: boolean; consumers: number }
 
 /**
@@ -277,7 +278,8 @@ function newConcepts(code: Pair[]) {
 
 export function abstractions(code: Pair[], measurable: boolean): Component {
   const { added, removed, newModules, goneModules } = newConcepts(code)
-  const singleUse = added.filter(d => d.kind !== 'type' && d.consumers <= 1)
+  // A shape used once is mild; a class used once, or a …Config or …Repository shape, is the smell.
+  const singleUse = added.filter(d => (d.kind === 'class' || d.kind === 'enum' || PATTERN.test(d.name)) && d.consumers <= 1)
   const patterned = added.filter(d => PATTERN.test(d.name))
   const grown = added.reduce((n, d) => n + WEIGHT_OF[d.kind], 0) + newModules
   const shrunk = removed.reduce((n, d) => n + WEIGHT_OF[d.kind], 0) + goneModules
@@ -303,8 +305,8 @@ export function amplification(code: Pair[], measurable: boolean): Component {
   const prod = prodOf(code)
   const { added, removed, newModules, goneModules } = newConcepts(code)
   const imports = Math.max(0, sum(prod, f => f.imports))
-  const machinery = newModules + added.length + imports / 4
-  const lessMachinery = goneModules + removed.length
+  const machinery = newModules + added.reduce((n, d) => n + WEIGHT_OF[d.kind], 0) + imports / 4
+  const lessMachinery = goneModules + removed.reduce((n, d) => n + WEIGHT_OF[d.kind], 0)
   const behaviour = behaviourOf(code)
   const ratio = machinery / behaviour
   const normalized = machinery - lessMachinery < 0
