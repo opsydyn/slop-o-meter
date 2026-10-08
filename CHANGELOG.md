@@ -20,5 +20,7 @@ First release: a deterministic core and the gauge.
 - The guard: mid-turn nudges to Claude on abstraction and type sprawl, type weakening, unrequested documents
   and repeated rewrites; an opt-in strict mode that leaves Claude a note after an over-budget turn; a Simplify button in the
   pane; and `/slop report` for the session. Advisory only, shown to the person, never part of the score.
+- Delight: Płanetnik's one-line verdict on each turn, the Sunbreak when a change climbs out of the red, the
+  forecast of recent turns as weather, and five milestones earned by habits (with a `milestones` setting).
 - Per-repository history, an advisory `budget` setting, no network access, no telemetry.
 - Calibrated against fixture scenarios and seven live dogfood experiments (DOGFOOD.md).

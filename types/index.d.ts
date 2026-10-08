@@ -59,6 +59,8 @@ declare module 'claude-code' {
       history: SlopRecord[]
       /** When this session began, so /slop report covers the session alone. */
       since: number | null
+      /** Milestones this repository has earned, by id. */
+      earned: string[]
     }
   }
 }

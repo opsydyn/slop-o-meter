@@ -15,7 +15,7 @@ let tick = 0
  * A session in a repository whose stored history ends with `record`: git answers
  * the repository root, the store holds the history, and the session starts.
  */
-async function sessionWith($: Engine, on: On, record?: SlopRecord, numstat = '') {
+async function sessionWith($: Engine, on: On, record?: SlopRecord, numstat = '', stored: Record<string, unknown> = {}) {
   // Git, as far as the mod asks it: the repository root, and a tree id for every snapshot.
   on('process.run', ($, e) => {
     const stdout = e.argv[1] === 'rev-parse' ? `${ROOT}\n${ROOT}/.git\n`
@@ -30,7 +30,7 @@ async function sessionWith($: Engine, on: On, record?: SlopRecord, numstat = '')
     const { Box } = $.ui.resolve(e)
     return <Box />
   })
-  mock.store(on, record ? { [`history:${ROOT}`]: [record] } : {})
+  mock.store(on, { ...(record ? { [`history:${ROOT}`]: [record] } : {}), ...stored })
   await $.session.start({ cwd: ROOT, surface: null, isInteractive: true })
 }
 
@@ -232,4 +232,28 @@ test('the guard off means no briefing', { options: { guard: 'off' } }, async ($,
   await sessionWith($, on)
   const context = await $.prompt.context({ blocks: [] })
   expect(context.blocks.map(b => b.name)).not.toContain('slopOMeter')
+})
+
+test('the pane carries Płanetnik’s verdict, the forecast and earned milestones, on every surface', async ($, on) => {
+  await sessionWith($, on, RECORD, '', { [`milestones:${ROOT}`]: ['storm'] })
+  for (const surface of SURFACES) {
+    const pane = await $.ui.mount({ ...PANE, surface })
+    const texts = (await pane.findAll({ type: 'Text' })).map(t => t.text)
+    expect(texts.some(t => t.startsWith('Płanetnik: “Burza!'))).toBe(true)
+    expect(texts).toContain('forecast')
+    expect(texts.some(t => t.includes('ϟ'))).toBe(true)
+    expect(texts.some(t => t.includes('◆ First storm survived'))).toBe(true)
+    expect(texts.some(t => t.includes('◇ Sunbreak'))).toBe(true)
+    await pane.unmount()
+  }
+})
+
+test('mascot off drops the verdict; milestones off drops the milestones', { options: { mascot: false, milestones: false } }, async ($, on) => {
+  await sessionWith($, on, RECORD, '', { [`milestones:${ROOT}`]: ['storm'] })
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const texts = (await pane.findAll({ type: 'Text' })).map(t => t.text)
+  expect(texts.some(t => t.startsWith('Płanetnik:'))).toBe(false)
+  expect(texts.some(t => t.includes('milestones'))).toBe(false)
+  expect(texts).toContain('forecast')
+  await pane.unmount()
 })

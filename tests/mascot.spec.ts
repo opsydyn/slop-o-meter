@@ -32,6 +32,11 @@ describe('Płanetnik', () => {
     expect(planetnik(70)[4]![23]).toBe('f')
   })
 
+  test('the sun shines only at a Sunbreak', () => {
+    expect(count(planetnik(14, 0, { sun: true }), 'y')).toBeGreaterThan(10)
+    expect(count(planetnik(14), 'y')).toBe(0)
+  })
+
   test('the strike is drawn only when asked', () => {
     expect(planetnik(87, 0, { strike: true })[10]![2]).toBe('z')
     expect(planetnik(87)[10]![2]).not.toBe('z')
@@ -82,6 +87,13 @@ describe('Płanetnik as SVG', () => {
     const crossing = planetnikSvg(87, { animate: true, crossing: true })
     expect(crossing).toContain('begin="0.38s"')
     expect(planetnikSvg(90, { animate: true })).not.toContain('begin="0.38s"')
+  })
+
+  test('a fresh Sunbreak parts the clouds; a stale one keeps only the sun', () => {
+    expect(planetnikSvg(14, { animate: true, sunbreak: true })).toContain('to="-80 -10"')
+    const still = planetnikSvg(14, { sunbreak: true })
+    expect(still).not.toContain('to="-80 -10"')
+    expect(still).toContain('#ffd66b')
   })
 
   test('draws on the pane itself, with no background tile', () => {

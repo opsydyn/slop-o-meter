@@ -19,6 +19,7 @@ const PALETTE = {
   d: '#c9c1b2', D: '#8e8678', o: '#e8e0d0', k: '#3e3933', // cloak, folds, brooch, boots
   c: '#d8d4cc', n: '#7a7886', N: '#3f3e4c', // clouds: fair, grey, storm
   z: '#fff1a8', r: '#5f86b3', i: '#e9eef4', // lightning, rain, hail
+  y: '#ffd66b', // the sun, at a Sunbreak
   W: '#f6f2e8', w: '#cbc3b2', // slop and its shadow
 } as const
 
@@ -32,6 +33,9 @@ const MOODS_SAID = ['calm skies', 'a cloud gathering', 'grey clouds and a heavy 
 /** The bolt that strikes when a turn crosses into Big Ball of Mud. */
 const STRIKE = [[2, 0], [1, 1], [2, 2], [3, 3], [2, 4], [1, 5], [2, 6], [3, 7], [2, 8], [1, 9], [2, 10], [1, 11], [2, 12], [3, 13], [2, 14], [1, 15], [2, 16], [1, 17], [2, 18], [1, 19], [2, 20], [1, 21]] as const
 
+/** The sun over his shoulder when a turn climbs out of the red. */
+const SUN = [[24, 1], [25, 1], [26, 1], [23, 2], [24, 2], [25, 2], [26, 2], [27, 2], [24, 3], [25, 3], [26, 3], [25, 0], [21, 2], [22, 0], [22, 4], [25, 5]] as const
+
 const moodOf = (score: number) => MOODS.indexOf(stateOf(Math.max(0, Math.min(100, Math.round(score)))))
 
 /** His face for the band: calm to furious. */
@@ -44,7 +48,7 @@ export const planetnikAlt = (score: number) => `Płanetnik: ${MOODS_SAID[moodOf(
  * Płanetnik at a score, one animation `frame` in: frames bob him when calm,
  * blink his eyes, drift the clouds and move the rain and hail.
  */
-export function planetnik(score: number, frame = 0, { strike = false } = {}): Grid {
+export function planetnik(score: number, frame = 0, { strike = false, sun = false } = {}): Grid {
   const s = Math.max(0, Math.min(100, Math.round(score)))
   const mood = moodOf(s)
   const grid: Grid = Array.from({ length: HEIGHT }, () => Array<Pixel | null>(WIDTH).fill(null))
@@ -61,6 +65,7 @@ export function planetnik(score: number, frame = 0, { strike = false } = {}): Gr
   if (mood >= 2) slop(put, lifted, s)
   if (mood === 4) hail(grid, put, frame)
   if (strike) STRIKE.forEach(([x, y]) => put(x, y, 'z'))
+  if (sun) SUN.forEach(([x, y]) => put(x, y, 'y'))
   return grid
 }
 
@@ -243,7 +248,7 @@ function runs(grid: Grid): string {
  * bolt in the storm, and, when the turn crossed into Big Ball of Mud, a strike
  * from the sky that lands with the gauge's slam (0.38 s).
  */
-export function planetnikSvg(score: number, { animate = false, crossing = false } = {}): string {
+export function planetnikSvg(score: number, { animate = false, crossing = false, sunbreak = false } = {}): string {
   const mood = moodOf(score)
   const motion = !animate ? ''
     : mood <= 1 ? '<animateTransform attributeName="transform" type="translate" values="0 0;0 -6;0 0" dur="1.2s" calcMode="discrete" repeatCount="3"/>'
@@ -255,13 +260,20 @@ export function planetnikSvg(score: number, { animate = false, crossing = false 
   const w = WIDTH * SCALE
   const h = HEIGHT * SCALE
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-12 -12 ${w + 24} ${h + 24}" shape-rendering="crispEdges" role="img">` +
-    `<g>${motion}${runs(planetnik(score))}${strike}</g></svg>`
+    `<g>${motion}${runs(planetnik(score, 0, { sun: sunbreak }))}${strike}${sunbreak && animate ? PARTING : ''}</g></svg>`
 }
+
+/** At a fresh Sunbreak, the last storm clouds slide away from the sun. */
+const PARTING = (['-80 -10', '80 10'] as const).map((to, i) =>
+  `<g><rect x="${i ? 120 : 0}" y="${i ? 66 : 42}" width="${i ? 42 : 36}" height="12" fill="${PALETTE.n}"/>` +
+  `<rect x="${i ? 126 : 6}" y="${i ? 60 : 36}" width="18" height="6" fill="${PALETTE.n}"/>` +
+  `<animateTransform attributeName="transform" type="translate" from="0 0" to="${to}" dur="1.4s" fill="freeze"/>` +
+  '<animate attributeName="opacity" values="1;1;0" dur="1.4s" fill="freeze"/></g>').join('')
 
 export const CELL_ROWS = HEIGHT / 2
 
 /** Płanetnik as terminal cells: each cell is two pixels, ▀ over ▄, on the terminal's own background. */
-export function planetnikCells(score: number, frame = 0, options: { strike?: boolean } = {}): string {
+export function planetnikCells(score: number, frame = 0, options: { strike?: boolean; sun?: boolean } = {}): string {
   const grid = planetnik(score, frame, options)
   const DEFAULT = 0x01000000
   const color = (p: Pixel | null | undefined) => (p ? parseInt(PALETTE[p].slice(1), 16) : DEFAULT)

@@ -5,6 +5,7 @@ import { crossedIntoMud, colorOf, gaugeCells, gaugeSvg, sweep } from '../src/gau
 import { diffTrees, findRepo, readFiles, snapshot, type Repo, type Run } from '../src/git.ts'
 import { ANALYZABLE } from '../src/analyze.ts'
 import { CELL_ROWS, planetnikAlt, planetnikCells, planetnikFace, planetnikSvg, WIDTH } from '../src/mascot.ts'
+import { isSunbreak, MILESTONES, milestonesIn, verdict, weather } from '../src/delight.ts'
 import { briefing, nudgesFor, report, simplifyPrompt, strictNote } from '../src/feedback.ts'
 import { explain, lineDiff, scoreTurn, type FileVersion, type Scored } from '../src/score.ts'
 import type { SlopRecord } from '../types/index.d.ts'
@@ -18,6 +19,7 @@ const turn = atom({ plugin: 'slop-o-meter', key: 'turn' } as const, null)
 const last = atom({ plugin: 'slop-o-meter', key: 'last' } as const, null)
 const history = atom({ plugin: 'slop-o-meter', key: 'history' } as const, [])
 const since = atom({ plugin: 'slop-o-meter', key: 'since' } as const, null)
+const earned = atom({ plugin: 'slop-o-meter', key: 'earned' } as const, [])
 
 let repo: Repo | null | undefined
 /** Width of the terminal gauge as last drawn, so a sweep can blit the mounted raster. */
@@ -61,8 +63,9 @@ const crossingOf = (record: SlopRecord) =>
 /** Plays Płanetnik's weather once in the terminal after a scored turn, striking first when it crossed into mud. */
 function animatePlanetnik($: EngineInterface, record: SlopRecord) {
   if (!planetnikShown) return
+  const sun = isSunbreak(record)
   const strike = crossingOf(record) ? [0, 1, 2].map(f => planetnikCells(record.score, f, { strike: f !== 1 })) : []
-  const frames = [...strike, ...Array.from({ length: 12 }, (_, f) => planetnikCells(record.score, f)), planetnikCells(record.score)]
+  const frames = [...strike, ...Array.from({ length: 12 }, (_, f) => planetnikCells(record.score, f, { sun })), planetnikCells(record.score, 0, { sun })]
   let i = 0
   const timer = $.clock.every(140, async () => {
     const cells = frames[i++]
@@ -85,12 +88,14 @@ async function readVersions(run: Run, r: Repo, before: string, after: string, ch
 }
 
 const storeKey = (r: Repo) => `history:${r.root}`
+const milestonesKey = (r: Repo) => `milestones:${r.root}`
 const relative = (r: Repo, path: string) =>
   path.startsWith(`${r.root}/`) ? path.slice(r.root.length + 1) : null
 
 export const register: Register = (on, options) => {
   const budget = typeof options.budget === 'number' ? options.budget : 40
   const mascot = options.mascot !== false
+  const milestones = options.milestones !== false
   /** off: observe only. nudge: mid-turn notes to Claude. strict: also a note after an over-budget turn. */
   const guard = options.guard === 'off' || options.guard === 'strict' ? options.guard : 'nudge'
 
@@ -105,6 +110,8 @@ export const register: Register = (on, options) => {
       const saved = ((await $.store.get(storeKey(r))) ?? []) as SlopRecord[]
       await update($, history, () => saved)
       await update($, last, () => saved.at(-1) ?? null)
+      const won = ((await $.store.get(milestonesKey(r))) ?? []) as string[]
+      await update($, earned, () => won)
     }
     return next(e)
   })
@@ -174,6 +181,18 @@ export const register: Register = (on, options) => {
     if (crossedIntoMud(record.score, previous?.score ?? null)) {
       $.ui.toast(`⚠ BIG BALL OF MUD: slop score ${record.score}. /slop explain says why.`)
     }
+    if (isSunbreak(record)) {
+      $.ui.toast(`☀ Sunbreak: ${record.score - record.delta!} → ${record.score}.${mascot ? ' Płanetnik lowers his fist.' : ''}`)
+    }
+    if (milestones) {
+      const had = await read($, earned)
+      const fresh = milestonesIn(all).filter(id => !had.includes(id))
+      if (fresh.length) {
+        await update($, earned, ids => [...ids, ...fresh])
+        await $.store.set(milestonesKey(r), [...had, ...fresh])
+        for (const id of fresh) $.ui.toast(`◆ Milestone: ${MILESTONES.find(m => m.id === id)!.label}`)
+      }
+    }
     const done = await next(e)
     const note = guard === 'strict' ? strictNote(record, budget) : null
     if (note) {
@@ -192,14 +211,18 @@ export const register: Register = (on, options) => {
     const record = await read($, last)
     if (arg === 'reset') {
       const r = await getRepo($)
-      if (r) await $.store.delete(storeKey(r))
+      if (r) {
+        await $.store.delete(storeKey(r))
+        await $.store.delete(milestonesKey(r))
+      }
+      await update($, earned, () => [])
       await update($, history, () => [])
       await update($, last, () => null)
       return { text: 'Slop-O-Meter history cleared for this repository.' }
     }
     if (arg === 'history') {
       const rows = (await read($, history)).slice(-20)
-      return { text: rows.length ? rows.map(h => `${new Date(h.at).toLocaleTimeString()}  ${String(h.score).padStart(3)}  ${h.state}`).join('\n') : 'No scored turns yet.' }
+      return { text: rows.length ? rows.map(past => `${new Date(past.at).toLocaleTimeString()}  ${String(past.score).padStart(3)}  ${past.state}`).join('\n') : 'No scored turns yet.' }
     }
     if (arg === 'report') {
       const from = (await read($, since)) ?? 0
@@ -244,6 +267,7 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const record = await read($, last)
     const rows = await read($, history)
+    const won = milestones ? await read($, earned) : []
     const width = e.props.bodyColumns
     const { Box, Button, Text } = $.ui.resolve(e)
     if (!record) return <Text dimColor>No scored turns yet. The meter scores each turn that changes code.</Text>
@@ -258,7 +282,7 @@ export const register: Register = (on, options) => {
       planetnikShown = mascot && width >= WIDTH + 2
       gauge = (
         <Box flexDirection="column">
-          {planetnikShown && <Raster key="planetnik" columns={WIDTH} rows={CELL_ROWS} cells={planetnikCells(record.score)} />}
+          {planetnikShown && <Raster key="planetnik" columns={WIDTH} rows={CELL_ROWS} cells={planetnikCells(record.score, 0, { sun: isSunbreak(record) })} />}
           <Raster key={GAUGE} columns={columns} rows={2} cells={gaugeCells(record.score, columns)} />
           <Text color={color} bold>
             {record.score}/100  {record.state === 'BIG BALL OF MUD' ? '⚠ ' : ''}{record.state} {trend(record.delta)}
@@ -280,7 +304,7 @@ export const register: Register = (on, options) => {
           {mascot && (
             <Svg
               key="planetnik"
-              source={planetnikSvg(record.score, { animate, crossing: animate && crossingOf(record) })}
+              source={planetnikSvg(record.score, { animate, crossing: animate && crossingOf(record), sunbreak: isSunbreak(record) })}
               alt={planetnikAlt(record.score)}
               width={Math.min(180, width * 4)}
               isInteractive={animate}
@@ -294,6 +318,7 @@ export const register: Register = (on, options) => {
       <Box flexDirection="column">
         <Text bold>SLOP-O-METER</Text>
         {gauge}
+        {mascot && <Text color="#a39b8e" wrap="wrap">Płanetnik: “{verdict(record, rows)}”</Text>}
         <Text> </Text>
         <Text>budget {budget}  <Text color={record.score > budget ? '#f0883e' : '#3fb950'}>{overBudget(record.score, budget)}</Text></Text>
         <Text dimColor>
@@ -326,9 +351,20 @@ export const register: Register = (on, options) => {
         ))}
         {record.changes.length > 12 && <Text dimColor>  …{record.changes.length - 12} more</Text>}
         <Text> </Text>
-        <Text bold>history</Text>
-        <Text>{spark(rows.slice(-Math.max(8, width - 4)).map(h => h.score))}</Text>
-        <Text dimColor>{rows.slice(-6).map(h => h.score).join(' → ')}</Text>
+        <Text bold>forecast</Text>
+        <Text>
+          {rows.slice(-Math.max(6, Math.floor((width - 2) / 2))).map(past => <Text color={colorOf(past.score)}>{weather(past.score)} </Text>)}
+        </Text>
+        <Text dimColor>{rows.slice(-6).map(past => past.score).join(' → ')}</Text>
+        {milestones && <Text> </Text>}
+        {milestones && <Text bold>milestones <Text dimColor>{won.length} of {MILESTONES.length}</Text></Text>}
+        {milestones && (
+          <Text wrap="wrap">
+            {MILESTONES.map(m => won.includes(m.id)
+              ? <Text color="#3fb950">◆ {m.label}   </Text>
+              : <Text dimColor>◇ {m.label}   </Text>)}
+          </Text>
+        )}
       </Box>
     )
   })
@@ -349,10 +385,6 @@ function toRecord(s: Scored, changes: SlopRecord['changes'], previous: SlopRecor
 function bar(score: number, width: number): string {
   const filled = Math.round((score / 100) * width)
   return '█'.repeat(filled) + '░'.repeat(Math.max(0, width - filled))
-}
-
-function spark(scores: number[]): string {
-  return scores.map(s => '▁▂▃▄▅▆▇█'[Math.min(7, Math.floor(s / 12.5))]).join('')
 }
 
 function signedPoints(points: number): string {

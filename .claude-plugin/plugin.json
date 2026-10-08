@@ -39,6 +39,13 @@
       ],
       "default": "nudge",
       "required": false
+    },
+    "milestones": {
+      "type": "boolean",
+      "title": "Milestones",
+      "description": "Earn milestones for good habits (clean streaks, Sunbreaks, no any, net-negative turns), with a toast when one is earned.",
+      "default": true,
+      "required": false
     }
   }
 }

@@ -80,8 +80,20 @@ Claude took the advice. `guard: off` keeps Slop-O-Meter a silent observer.
 
 In Polish lore a płanetnik rides the storm clouds and drives the hail. Ours stands on his cloud beside the
 gauge and judges each turn: calm skies for clean code, gathering cloud as it gets sloppy, lightning in his raised
-fist at Heavy Slop, and a full storm with slop splattered over him at Big Ball of Mud. His face rides in the band
-too, from `(•_•)` to `(╬ಠ益ಠ)`. He is presentation only; turn him off with `mascot` in `/config`.
+fist at Heavy Slop, and a full storm with slop splattered over him at Big Ball of Mud. His face rides in the band,
+from `(•_•)` to `(╬ಠ益ಠ)`.
+
+- **His verdict.** One line under him in the pane, from the turn's biggest driver and its numbers: *"6 new
+  abstractions, 4 with one consumer. The clouds gather."* At Big Ball of Mud: *"Burza!"*
+- **Sunbreak.** When a change climbs out of the red (from 61 or more, down 30 or more, to 40 or less) the sun
+  breaks through, the last clouds part, and he lowers his fist.
+- **The forecast.** Your recent turns as weather, ☀ ☁ ☂ ϟ, coloured by state: the trend matters more than any
+  one turn.
+- **Milestones**, earned by habits rather than luck: first storm survived, clear skies (ten clean turns), a
+  Sunbreak, no `any` for twenty turns, and a net-negative turn. A toast when you earn one; `milestones` in
+  `/config` turns them off.
+
+He is presentation only; turn him (and his verdict) off with `mascot` in `/config`.
 
 ## Install
 
@@ -100,7 +112,7 @@ yet set; until you set it, the default of 40 applies.
 | Where | What you see |
 |---|---|
 | above the prompt | `SLOP ███░░░░░ 23 MILD SLOP ↗ +4`, and live edit activity while a turn runs |
-| `/slop` | the pane: gauge, budget, score breakdown, changed files, history; the explanation in the transcript |
+| `/slop` | the pane: gauge, Płanetnik's verdict, budget, score breakdown, changed files, forecast, milestones |
 | `/slop explain` | the explanation only |
 | `/slop diff` | the files the last scored turn changed |
 | `/slop history` | the last 20 scored turns |
@@ -111,7 +123,7 @@ The gauge is an SVG instrument in the desktop Code tab, VS Code and mobile, and 
 terminal. Where no custom drawing is available, `/slop` still prints the full explanation.
 
 **Settings** (`/config`, under slop-o-meter): `guard` is `off`, `nudge` (default) or `strict`; `mascot` shows or
-hides Płanetnik.
+hides Płanetnik and his verdict; `milestones` turns milestones and their toasts on or off.
 
 **Budget:** an advisory per-turn score, default 40, shown in the pane as over or under. Set `budget` in
 `/config` under slop-o-meter. Slop-O-Meter observes; it never blocks an edit.
