@@ -61,6 +61,11 @@ never reloaded, and the session keeps running stale code. Sync after each change
 rsync -a --delete --exclude='/.claude-plugin/types' --include='/.claude-plugin/***' --include='/hooks/***' --include='/src/***' --include='/types/***' --include='/package.json' --exclude='*' ./ ~/.claude/dev-mods/<session>/slop-o-meter/
 ```
 
+## The README images
+
+`docs/hero.svg` and the Płanetnik images are drawn by the mod's own code. After changing the gauge or
+Płanetnik, redraw the hero with `bun docs/hero.ts`.
+
 ## Changing the scoring
 
 1. Add or adjust a scenario in `tests/fixtures/scenarios.ts` that shows the problem.

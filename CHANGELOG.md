@@ -23,4 +23,7 @@ First release: a deterministic core and the gauge.
 - Delight: Płanetnik's one-line verdict on each turn, the Sunbreak when a change climbs out of the red, the
   forecast of recent turns as weather, and five milestones earned by habits (with a `milestones` setting).
 - Per-repository history, an advisory `budget` setting, no network access, no telemetry.
+- Ready for real repositories: a snapshot index per session (concurrent sessions never collide), an honest pause
+  when more than 5,000 untracked files would slow every turn, a clear message outside git, a first-run welcome,
+  `/slop help`, a breakdown that shows only the signals that moved, and changed files as links.
 - Calibrated against fixture scenarios and seven live dogfood experiments (DOGFOOD.md).

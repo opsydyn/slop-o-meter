@@ -2,14 +2,11 @@
 
 **Is your coding agent quietly building a Big Ball of Mud?**
 
-<p>
-  <img src="docs/gauge-heavy.svg" alt="Slop score 75 of 100: HEAVY SLOP" width="300">
-  <img src="docs/gauge-clean.svg" alt="Slop score 0 of 100: CLEAN" width="300">
-</p>
+<p><img src="docs/hero.svg" alt="The gauge and Płanetnik: a clean turn at 18, a slam into Big Ball of Mud at 87, then the Sunbreak down to 14" width="640"></p>
 
-A live experiment from [DOGFOOD.md](DOGFOOD.md): a `/items/count` endpoint built behind an interface, a
-repository, a service, a wrapper, an adapter and a factory scored **75, HEAVY SLOP**. Collapsing it back to
-`{ count: items.length }` scored **0, CLEAN**.
+The loop above is an illustration. A real one, from [DOGFOOD.md](DOGFOOD.md): a `/items/count` endpoint built
+behind an interface, a repository, a service, a wrapper, an adapter and a factory scored **75, HEAVY SLOP**.
+Collapsing it back to `{ count: items.length }` scored **0, CLEAN**.
 
 **Not an LLM vibe score.** Slop-O-Meter is a Claude Code mod that scores every code-changing turn from
 0 (clean) to 100 (mud) using deterministic measurements of what the turn changed and how the agent got there:

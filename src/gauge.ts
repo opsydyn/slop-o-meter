@@ -45,6 +45,22 @@ function point(score: number, radius: number): string {
 const arc = (from: number, to: number, radius: number) =>
   `M ${point(from, radius)} A ${radius} ${radius} 0 0 1 ${point(to, radius)}`
 
+/** The gauge's centre and radius, for drawings that put their own needle on the dial. */
+export const DIAL = { cx: CX, cy: CY, r: R }
+
+/** The dial: the five zones (lit up to `score`) and the ticks, without needle or labels. */
+export function dial(score: number): string {
+  const zones = ZONES.map(z =>
+    `<path d="${arc(z.from + 0.6, z.to - 0.6, R)}" stroke="${z.color}" stroke-width="16" fill="none" opacity="${score >= z.from ? 0.95 : 0.3}"/>`,
+  ).join('')
+  const ticks = Array.from({ length: 11 }, (_, i) => {
+    const v = i * 10
+    const major = v % 50 === 0
+    return `<path d="M ${point(v, R - 12)} L ${point(v, R - (major ? 22 : 17))}" class="tick" stroke-width="${major ? 2 : 1}"/>`
+  }).join('')
+  return zones + ticks
+}
+
 export function gaugeSvg({ score, state, delta, animate }: GaugeInput): string {
   const s = clamp(score)
   const to = needleAngle(s)
@@ -54,14 +70,6 @@ export function gaugeSvg({ score, state, delta, animate }: GaugeInput): string {
   const crossing = animate && crossedIntoMud(s, delta === null ? null : previous)
   const color = colorOf(s)
 
-  const zones = ZONES.map(z =>
-    `<path d="${arc(z.from + 0.6, z.to - 0.6, R)}" stroke="${z.color}" stroke-width="16" fill="none" opacity="${s >= z.from ? 0.95 : 0.3}"/>`,
-  ).join('')
-  const ticks = Array.from({ length: 11 }, (_, i) => {
-    const v = i * 10
-    const major = v % 50 === 0
-    return `<path d="M ${point(v, R - 12)} L ${point(v, R - (major ? 22 : 17))}" class="tick" stroke-width="${major ? 2 : 1}"/>`
-  }).join('')
 
   const needleMotion = !animate || from === to
     ? ''
@@ -94,7 +102,7 @@ export function gaugeSvg({ score, state, delta, animate }: GaugeInput): string {
 ${isMud ? `<defs><filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="4"/></filter></defs>` : ''}
 <g>${impact}
   ${isMud ? `<path d="${arc(80, 100, R)}" stroke="#f85149" stroke-width="22" fill="none" opacity="0.45" filter="url(#glow)"/>` : ''}
-  ${zones}${ticks}
+  ${dial(s)}
   <text x="${point(0, R).split(' ')[0]}" y="${CY + 18}" class="dim" font-size="9">CLEAN</text>
   <text x="${point(100, R).split(' ')[0]}" y="${CY + 18}" class="dim" font-size="9">MUD</text>
   <g transform="rotate(${to} ${CX} ${CY})">${needleMotion}

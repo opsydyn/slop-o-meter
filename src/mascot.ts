@@ -243,6 +243,9 @@ function runs(grid: Grid): string {
   return out
 }
 
+/** Płanetnik's pixels as SVG rectangles, for drawings that compose him with other things. */
+export const planetnikRects = (score: number, options: { sun?: boolean } = {}) => runs(planetnik(score, 0, options))
+
 /**
  * Płanetnik as SVG. A fresh result animates once: a calm bob, a flickering
  * bolt in the storm, and, when the turn crossed into Big Ball of Mud, a strike
