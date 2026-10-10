@@ -97,12 +97,11 @@ He is presentation only; turn him (and his verdict) off with `mascot` in `/confi
 Requires a Claude Code build with mods (function hooks); developed against 2.1.286. Git must be on the path.
 
 ```bash
-claude plugin marketplace add <owner>/slop-o-meter
+claude plugin marketplace add opsydyn/slop-o-meter
 claude plugin install slop-o-meter@slop-o-meter
 ```
 
-(`<owner>` is the GitHub account hosting this repository.) Installing notes that the `budget` option is not
-yet set; until you set it, the default of 40 applies.
+Installing notes that some options are not yet set: until you set them, their defaults apply (see Settings below).
 
 ## Use
 

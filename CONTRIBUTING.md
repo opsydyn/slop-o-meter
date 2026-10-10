@@ -6,7 +6,7 @@ whether it makes the project simpler today or guesses about tomorrow.
 ## Setup
 
 ```bash
-git clone https://github.com/<owner>/slop-o-meter
+git clone https://github.com/opsydyn/slop-o-meter
 cd slop-o-meter
 bun install                              # dev only: TypeScript and test typings
 bun test .spec.                          # scoring, lexer, git and gauge tests; no Claude Code needed

@@ -5,6 +5,8 @@
   "author": {
     "name": "Alan Currie"
   },
+  "homepage": "https://github.com/opsydyn/slop-o-meter",
+  "repository": "https://github.com/opsydyn/slop-o-meter",
   "license": "MIT",
   "keywords": [
     "metrics",
