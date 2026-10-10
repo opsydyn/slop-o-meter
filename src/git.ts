@@ -19,9 +19,13 @@ export async function findRepo(run: Run): Promise<Repo | null> {
   return root && gitDir ? { root, gitDir } : null
 }
 
-/** Writes the working tree as a tree object and returns its id. */
-export async function snapshot(run: Run, repo: Repo): Promise<string | null> {
-  const index = `${repo.gitDir}/slop-o-meter.index`
+/**
+ * Writes the working tree as a tree object and returns its id. Each session
+ * keeps its own private index (`key`), so two sessions in one repository never
+ * contend for the same lock.
+ */
+export async function snapshot(run: Run, repo: Repo, key = 'default'): Promise<string | null> {
+  const index = `${repo.gitDir}/${indexName(key)}`
   // Seed the private index from the real one the first time, so git can reuse
   // its stat cache instead of hashing every file.
   await run(['sh', '-c', 'test -f "$1" || cp "$2" "$1" 2>/dev/null || true', 'sh', index, `${repo.gitDir}/index`])
@@ -30,6 +34,33 @@ export async function snapshot(run: Run, repo: Repo): Promise<string | null> {
   if (add.exitCode !== 0) return null
   const tree = await run(['git', '-C', repo.root, 'write-tree'], { env })
   return tree.exitCode === 0 ? tree.stdout.trim() : null
+}
+
+const indexName = (key: string) => `slop-o-meter-${key.replace(/[^A-Za-z0-9-]/g, '')}.index`
+
+/**
+ * Above this many untracked, unignored files, snapshots pause: hashing them all
+ * (build output, datasets) can take many seconds and fill `.git` with objects.
+ */
+export const UNTRACKED_LIMIT = 5000
+
+/** How many untracked files a snapshot would have to hash; git's own ignore rules apply. */
+export async function untrackedCount(run: Run, repo: Repo): Promise<number> {
+  const r = await run(['git', '-C', repo.root, 'ls-files', '--others', '--exclude-standard', '-z'])
+  if (r.exitCode !== 0) return 0
+  // Output cut at its limit means far more files than we would ever snapshot.
+  if (r.stdout.length >= 4_000_000) return Number.POSITIVE_INFINITY
+  return r.stdout.split('\0').filter(Boolean).length
+}
+
+/**
+ * Removes this mod's private indexes: all of them, or only those a day old that
+ * belong to other sessions.
+ */
+export async function removeIndexes(run: Run, repo: Repo, { keep, staleOnly = false }: { keep?: string; staleOnly?: boolean } = {}) {
+  const age = staleOnly ? ['-mtime', '+1'] : []
+  const except = keep ? ['!', '-name', indexName(keep)] : []
+  await run(['find', repo.gitDir, '-maxdepth', '1', '-name', 'slop-o-meter*.index', ...except, ...age, '-delete'])
 }
 
 export async function diffTrees(run: Run, repo: Repo, before: string, after: string): Promise<FileChange[]> {

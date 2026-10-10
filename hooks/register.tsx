@@ -2,13 +2,13 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import { crossedIntoMud, colorOf, gaugeCells, gaugeSvg, sweep } from '../src/gauge.ts'
-import { diffTrees, findRepo, readFiles, snapshot, type Repo, type Run } from '../src/git.ts'
+import { diffTrees, findRepo, readFiles, removeIndexes, snapshot, UNTRACKED_LIMIT, untrackedCount, type Repo, type Run } from '../src/git.ts'
 import { ANALYZABLE } from '../src/analyze.ts'
 import { CELL_ROWS, planetnikAlt, planetnikCells, planetnikFace, planetnikSvg, WIDTH } from '../src/mascot.ts'
 import { isSunbreak, MILESTONES, milestonesIn, verdict, weather } from '../src/delight.ts'
 import { briefing, nudgesFor, report, simplifyPrompt, strictNote } from '../src/feedback.ts'
 import { explain, lineDiff, scoreTurn, type FileVersion, type Scored } from '../src/score.ts'
-import type { SlopRecord } from '../types/index.d.ts'
+import type { SlopPause, SlopRecord } from '../types/index.d.ts'
 
 const PANE = 'slop'
 const GAUGE = 'gauge'
@@ -20,6 +20,7 @@ const last = atom({ plugin: 'slop-o-meter', key: 'last' } as const, null)
 const history = atom({ plugin: 'slop-o-meter', key: 'history' } as const, [])
 const since = atom({ plugin: 'slop-o-meter', key: 'since' } as const, null)
 const earned = atom({ plugin: 'slop-o-meter', key: 'earned' } as const, [])
+const paused = atom({ plugin: 'slop-o-meter', key: 'pause' } as const, null)
 
 let repo: Repo | null | undefined
 /** Width of the terminal gauge as last drawn, so a sweep can blit the mounted raster. */
@@ -32,6 +33,38 @@ function runner($: EngineInterface): Run {
     const r = await $.process.run(argv, { env: init?.env, stdin: init?.stdin, timeoutMs: 20_000 })
     return { exitCode: r.exitCode, stdout: r.stdout }
   }
+}
+
+let sessionKey: string | undefined
+
+/** This session's own snapshot index name, so concurrent sessions never share a lock. */
+async function keyOf($: EngineInterface): Promise<string> {
+  if (sessionKey === undefined) sessionKey = await $.session.id().catch(() => 'default')
+  return sessionKey
+}
+
+/**
+ * Snapshots the working tree, unless too many untracked files would make it slow
+ * and bloat `.git`: then no snapshot, and the reason to pause scoring.
+ */
+async function snapshotTurn($: EngineInterface, r: Repo): Promise<{ tree: string | null; pause: SlopPause }> {
+  const run = runner($)
+  const untracked = await untrackedCount(run, r)
+  if (untracked > UNTRACKED_LIMIT) return { tree: null, pause: { reason: 'untracked', count: untracked } }
+  return { tree: await snapshot(run, r, await keyOf($)), pause: null }
+}
+
+/** Records why scoring paused, and says so once when it starts. */
+async function pauseFor($: EngineInterface, pause: SlopPause) {
+  const was = await read($, paused)
+  if (pause?.reason === 'untracked' && was?.reason !== 'untracked') $.ui.toast(`Slop-O-Meter paused: ${pauseText(pause)}`)
+  if (JSON.stringify(was) !== JSON.stringify(pause)) await update($, paused, () => pause)
+}
+
+function pauseText(pause: NonNullable<SlopPause>): string {
+  if (pause.reason === 'no-repo') return 'needs a git repository to measure turns'
+  const count = Number.isFinite(pause.count) ? pause.count.toLocaleString('en') : 'too many'
+  return `${count} untracked files would slow every turn; add build output to .gitignore`
 }
 
 async function getRepo($: EngineInterface): Promise<Repo | null> {
@@ -89,6 +122,27 @@ async function readVersions(run: Run, r: Repo, before: string, after: string, ch
 
 const storeKey = (r: Repo) => `history:${r.root}`
 const milestonesKey = (r: Repo) => `milestones:${r.root}`
+const welcomedKey = (r: Repo) => `welcomed:${r.root}`
+/** A changed file as a link that opens it, where the repository is known. */
+const fileLink = (path: string) => (repo ? `file://${encodeURI(`${repo.root}/${path}`)}` : encodeURI(path))
+
+const MEASURES = 'how widely a change spreads, complexity, new abstractions, machinery per behaviour, edits thrown away, ' +
+  'type weakening, dependencies, duplication, comment noise, documents nobody asked for, and tests'
+
+const HELP = [
+  'SLOP-O-METER',
+  '',
+  '/slop            the pane, and why the last turn scored what it did',
+  '/slop explain    the explanation only',
+  '/slop diff       the files the last scored turn changed',
+  '/slop history    the last 20 scored turns',
+  '/slop report     this session: averages, worst turn, best simplification, guard nudges',
+  '/slop reset      forget this repository: history, milestones and snapshot indexes',
+  '/slop help       this',
+  '',
+  'Settings, in /config under slop-o-meter: budget (default 40), guard (off · nudge · strict),',
+  'mascot (Płanetnik and his verdict), milestones.',
+].join('\n')
 const relative = (r: Repo, path: string) =>
   path.startsWith(`${r.root}/`) ? path.slice(r.root.length + 1) : null
 
@@ -102,12 +156,18 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'slop',
-      description: 'Slop-O-Meter: the last turn\'s slop score. Args: explain, diff, history, report, reset',
+      description: 'Slop-O-Meter: the last turn\'s slop score. Args: explain, diff, history, report, reset, help',
     })
     await update($, since, at => at ?? Date.now())
     const r = await getRepo($)
+    await update($, paused, () => (r ? null : { reason: 'no-repo' }))
     if (r) {
+      await removeIndexes(runner($), r, { keep: await keyOf($), staleOnly: true })
       const saved = ((await $.store.get(storeKey(r))) ?? []) as SlopRecord[]
+      if (saved.length === 0 && !(await $.store.get(welcomedKey(r)))) {
+        await $.store.set(welcomedKey(r), true)
+        $.ui.toast('Slop-O-Meter is watching this repository: your next code change gets a score. /slop opens the pane; /slop help lists the rest.')
+      }
       await update($, history, () => saved)
       await update($, last, () => saved.at(-1) ?? null)
       const won = ((await $.store.get(milestonesKey(r))) ?? []) as string[]
@@ -125,8 +185,9 @@ export const register: Register = (on, options) => {
 
   on('turn.start', async ($, e, next) => {
     const r = await getRepo($)
-    const baseline = r ? await snapshot(runner($), r) : null
-    await update($, turn, () => ({ baseline, edits: {}, request: e.text }))
+    const snap = r ? await snapshotTurn($, r) : { tree: null, pause: { reason: 'no-repo' } as const }
+    await pauseFor($, snap.pause)
+    await update($, turn, () => ({ baseline: snap.tree, edits: {}, request: e.text }))
     return next(e)
   })
 
@@ -163,7 +224,9 @@ export const register: Register = (on, options) => {
     const r = await getRepo($)
     if (!r || !t?.baseline) return next(e)
     const run = runner($)
-    const final = await snapshot(run, r)
+    const end = await snapshotTurn($, r)
+    await pauseFor($, end.pause)
+    const final = end.tree
     if (!final) return next(e)
     const changes = await diffTrees(run, r, t.baseline, final)
     if (changes.length === 0 && Object.keys(t.edits).length === 0) return next(e)
@@ -209,11 +272,16 @@ export const register: Register = (on, options) => {
   on('command.run', { command: 'slop' }, async ($, e) => {
     const arg = e.args.trim()
     const record = await read($, last)
+    if (!['', 'explain', 'diff', 'history', 'report', 'reset'].includes(arg)) {
+      const settings = `budget ${budget} · guard ${guard} · mascot ${mascot ? 'on' : 'off'} · milestones ${milestones ? 'on' : 'off'}`
+      return { text: `${arg === 'help' ? '' : `Unknown: /slop ${arg}\n\n`}${HELP}\n\nNow: ${settings}` }
+    }
     if (arg === 'reset') {
       const r = await getRepo($)
       if (r) {
         await $.store.delete(storeKey(r))
         await $.store.delete(milestonesKey(r))
+        await removeIndexes(runner($), r)
       }
       await update($, earned, () => [])
       await update($, history, () => [])
@@ -233,13 +301,16 @@ export const register: Register = (on, options) => {
       return { text: record.changes.map(c => `+${c.added} -${c.deleted}  ${c.path}`).join('\n') || 'No file changes.' }
     }
     if (arg === '') await $.ui.open({ id: PANE, title: 'Slop-O-Meter' })
-    return { text: `${explain(record)}\n\nbudget ${budget}  ${overBudget(record.score, budget)}` }
+    const pause = await read($, paused)
+    const note = pause ? `Not scoring right now: ${pauseText(pause)}.\n\nThe last scored turn:\n` : ''
+    return { text: `${note}${explain(record)}\n\nbudget ${budget}  ${overBudget(record.score, budget)}` }
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     const { Box, Text } = $.ui.resolve(e)
     const record = await read($, last)
+    const pause = await read($, paused)
     const t = e.props.isWorking ? await read($, turn) : null
     const files = t ? Object.keys(t.edits).length : 0
     const ops = t ? Object.values(t.edits).reduce((n, f) => n + f.ops, 0) : 0
@@ -249,7 +320,9 @@ export const register: Register = (on, options) => {
       <Box flexDirection="column">
       <Box>
         <Text bold>SLOP </Text>
-        {record ? (
+        {pause ? (
+          <Text color="#d29922">— {pause.reason === 'untracked' ? 'paused: ' : ''}{pauseText(pause)}</Text>
+        ) : record ? (
           <Text color={colorOf(record.score)}>
             {bar(record.score, 12)} {String(record.score).padStart(3)}  {record.state} {trend(record.delta)}
           </Text>
@@ -268,12 +341,36 @@ export const register: Register = (on, options) => {
     const record = await read($, last)
     const rows = await read($, history)
     const won = milestones ? await read($, earned) : []
+    const pause = await read($, paused)
     const width = e.props.bodyColumns
-    const { Box, Button, Text } = $.ui.resolve(e)
-    if (!record) return <Text dimColor>No scored turns yet. The meter scores each turn that changes code.</Text>
+    const { Box, Button, Markdown, Text } = $.ui.resolve(e)
+    const pauseLine = pause && <Text color="#d29922" wrap="wrap">{pause.reason === 'untracked' ? 'Paused: ' : 'Slop-O-Meter '}{pauseText(pause)}.</Text>
+    if (!record) {
+      let calm = null
+      if (mascot && e.surface === 'terminal' && width >= WIDTH + 2) {
+        const { Raster } = $.ui.resolve(e)
+        calm = <Raster key="planetnik" columns={WIDTH} rows={CELL_ROWS} cells={planetnikCells(0)} />
+      } else if (mascot && e.surface !== 'terminal') {
+        const { Svg } = $.ui.resolve(e)
+        calm = <Svg key="planetnik" source={planetnikSvg(0)} alt={planetnikAlt(0)} width={Math.min(160, width * 4)} />
+      }
+      return (
+        <Box flexDirection="column">
+          <Text bold>SLOP-O-METER</Text>
+          {pauseLine}
+          {calm}
+          <Text wrap="wrap">No scored turns yet. Make a change and {mascot ? 'Płanetnik will judge it' : 'it will be scored'}.</Text>
+          <Text dimColor wrap="wrap">It measures {MEASURES}.</Text>
+          <Text dimColor>/slop help lists the commands and settings.</Text>
+        </Box>
+      )
+    }
 
     const color = colorOf(record.score)
     const ranked = [...record.components].sort((a, b) => b.contribution - a.contribution)
+    // Only the signals that moved the score get a row; the rest are named on one line.
+    const loud = ranked.filter(c => c.normalized !== null && Math.round(c.contribution) !== 0)
+    const quiet = ranked.filter(c => !loud.includes(c))
     let gauge
     if (e.surface === 'terminal') {
       const { Raster } = $.ui.resolve(e)
@@ -317,6 +414,7 @@ export const register: Register = (on, options) => {
     return (
       <Box flexDirection="column">
         <Text bold>SLOP-O-METER</Text>
+        {pauseLine}
         {gauge}
         {mascot && <Text color="#a39b8e" wrap="wrap">Płanetnik: “{verdict(record, rows)}”</Text>}
         <Text> </Text>
@@ -334,21 +432,22 @@ export const register: Register = (on, options) => {
         )}
         <Text> </Text>
         <Text bold>score breakdown</Text>
-        {ranked.map(c => (
+        {loud.map(c => (
           <Text wrap="truncate-end">
             <Text color={c.normalized === null ? undefined : colorOf(c.normalized * 100)}>
               {c.normalized === null ? '   –' : signedPoints(c.contribution).padStart(4)}
             </Text>
-            {'  '}{c.label}<Text dimColor>  {c.normalized === null ? 'unavailable' : c.reason}</Text>
+            {'  '}{c.label}<Text dimColor>  {c.reason}</Text>
           </Text>
         ))}
+        {quiet.length > 0 && (
+          <Text dimColor wrap="wrap">
+            {loud.length ? '' : 'nothing scored · '}{quiet.length} quiet: {quiet.map(c => (c.normalized === null ? `${c.label} (unavailable)` : c.label)).join(', ')}
+          </Text>
+        )}
         <Text> </Text>
         <Text bold>changed files</Text>
-        {record.changes.slice(0, 12).map(c => (
-          <Text wrap="truncate-start" dimColor>
-            <Text color="#3fb950">+{c.added}</Text> <Text color="#f85149">-{c.deleted}</Text>  {c.path}
-          </Text>
-        ))}
+        <Markdown text={record.changes.slice(0, 12).map(c => `- \`+${c.added} −${c.deleted}\` [${c.path}](${fileLink(c.path)})`).join('\n')} />
         {record.changes.length > 12 && <Text dimColor>  …{record.changes.length - 12} more</Text>}
         <Text> </Text>
         <Text bold>forecast</Text>

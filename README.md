@@ -117,7 +117,8 @@ yet set; until you set it, the default of 40 applies.
 | `/slop diff` | the files the last scored turn changed |
 | `/slop history` | the last 20 scored turns |
 | `/slop report` | the session so far: averages, worst turn, best simplification, guard nudges |
-| `/slop reset` | clears this repository's history |
+| `/slop reset` | forgets this repository: history, milestones and snapshot indexes |
+| `/slop help` | the commands, and your current settings |
 
 The gauge is an SVG instrument in the desktop Code tab, VS Code and mobile, and a cell raster in the
 terminal. Where no custom drawing is available, `/slop` still prints the full explanation.
@@ -145,10 +146,11 @@ note it gives Claude is shown to you (a toast for a nudge, a transcript notice f
 What it does on your machine, all auditable in [`hooks/register.tsx`](hooks/register.tsx) and
 [`src/git.ts`](src/git.ts):
 
-- runs `git` in your repository: `rev-parse`, `add -A` into a **private** index file
-  (`.git/slop-o-meter.index`), `write-tree`, `diff --numstat` and `cat-file --batch`. Your real index, stash,
-  branches and refs are never touched. The snapshots add unreferenced objects to `.git/objects`, which
-  `git gc` cleans up like any other.
+- runs `git` in your repository: `rev-parse`, `ls-files --others`, `add -A` into a **private** index file per
+  session (`.git/slop-o-meter-<session>.index`), `write-tree`, `diff` and `cat-file --batch`. Your real index,
+  stash, branches and refs are never touched. The snapshots add unreferenced objects to `.git/objects`, which
+  `git gc` cleans up like any other. A day-old index from a finished session is removed when a new session
+  starts, and `/slop reset` removes them all; after uninstalling, `rm .git/slop-o-meter*.index` tidies up.
 - reads a file's previous contents when the agent overwrites it with Write, to measure the change.
 - keeps score history in Claude Code's plugin store (`~/.claude/plugins/store/`), 200 turns per repository:
   scores, metric values, and changed file paths with line counts. Never file contents.
@@ -163,6 +165,10 @@ with a small built-in lexer; when a turn changes only other languages they are r
 
 - Edits the agent makes through the shell (`sed`, `cat >`) are invisible to churn; the final diff still sees them.
 - Anything that changes the working tree during a turn counts as the turn, including your own edits made while it runs.
+- Scoring pauses, and says why, in a repository with more than 5,000 untracked files that are not gitignored
+  (build output, datasets): hashing them on every turn took 15 seconds in our tests. Add them to `.gitignore`
+  and scoring resumes. Outside a git repository nothing is scored, and the band says so.
+- Two sessions in the same repository are fine: each keeps its own snapshot index.
 - Duplication is measured across the files a turn changed, not the whole repository.
 - Very large changes are partly skipped: more than 60 analysable files, files over 400 KB, or over 5,000 changed lines.
 - The weights are a hypothesis being calibrated by dogfooding. Expect relative ordering to be more reliable

@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, writeFileSync, mkdirSync, rmSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { diffTrees, findRepo, readFiles, snapshot, type Run } from '../src/git.ts'
+import { diffTrees, findRepo, readFiles, removeIndexes, snapshot, untrackedCount, type Run } from '../src/git.ts'
 
 let dir: string
 const run: Run = async (argv, init) => {
@@ -83,5 +83,41 @@ describe('readFiles', () => {
     expect(old.get('a.ts')).toBe('héllo ✓\nline 2\n')
     expect(old.get('b.ts')).toBeNull()
     expect((await readFiles(run, repo, after, ['b.ts'])).get('b.ts')).toBe('new\n')
+  })
+})
+
+describe('sessions sharing a repository', () => {
+  test('a session holding its index lock does not block another session', async () => {
+    write('a.ts', 'a\n')
+    const repo = (await findRepo(run))!
+    // One session mid-snapshot: git holds its index lock.
+    writeFileSync(`${repo.gitDir}/slop-o-meter-one.index.lock`, '')
+    expect(await snapshot(run, repo, 'one')).toBeNull()
+    expect(await snapshot(run, repo, 'two')).toMatch(/^[0-9a-f]{40}$/)
+  })
+
+  test('stale indexes of other sessions are removed; the current one is kept', async () => {
+    const repo = (await findRepo(run))!
+    for (const key of ['mine', 'old', 'recent']) await snapshot(run, repo, key)
+    const dayAgo = new Date(Date.now() - 2 * 86_400_000)
+    utimesSync(`${repo.gitDir}/slop-o-meter-old.index`, dayAgo, dayAgo)
+    utimesSync(`${repo.gitDir}/slop-o-meter-mine.index`, dayAgo, dayAgo)
+    await removeIndexes(run, repo, { keep: 'mine', staleOnly: true })
+    expect(existsSync(`${repo.gitDir}/slop-o-meter-old.index`)).toBe(false)
+    expect(existsSync(`${repo.gitDir}/slop-o-meter-mine.index`)).toBe(true)
+    expect(existsSync(`${repo.gitDir}/slop-o-meter-recent.index`)).toBe(true)
+    await removeIndexes(run, repo)
+    expect(existsSync(`${repo.gitDir}/slop-o-meter-mine.index`)).toBe(false)
+  })
+})
+
+describe('untracked files', () => {
+  test('counts what a snapshot would hash, not what is ignored', async () => {
+    write('.gitignore', 'node_modules/\n')
+    write('node_modules/x/index.js', 'x')
+    write('dist/a.js', 'a')
+    write('dist/b.js', 'b')
+    const repo = (await findRepo(run))!
+    expect(await untrackedCount(run, repo)).toBe(3)
   })
 })

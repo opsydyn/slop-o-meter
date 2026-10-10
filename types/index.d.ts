@@ -37,6 +37,9 @@ export type SlopRecord = {
   nudges?: string[]
 }
 
+/** Why turns are not being scored right now, if they are not. */
+export type SlopPause = { reason: 'no-repo' } | { reason: 'untracked'; count: number } | null
+
 /** The turn in progress: kept in state so a hot reload mid-turn loses nothing. */
 export type SlopTurn = {
   baseline: string | null
@@ -61,6 +64,7 @@ declare module 'claude-code' {
       since: number | null
       /** Milestones this repository has earned, by id. */
       earned: string[]
+      pause: SlopPause
     }
   }
 }
