@@ -13,7 +13,7 @@ First release: a deterministic core and the gauge.
 - Scores combine as independent evidence and explain themselves component by component.
 - The `AbovePrompt` band (shared: other mods' band content is kept), the `/slop` pane and `explain`,
   `diff`, `history`, `reset`.
-- An SVG gauge (desktop, VS Code, mobile) with needle animation and a one-time Big Ball of Mud slam; a
+- An SVG gauge (Desktop app Code tab) with needle animation and a one-time Big Ball of Mud slam; a
   raster gauge in the terminal.
 - Płanetnik, the storm spirit from Polish lore, judges each turn beside the gauge (SVG on desktop, half-block
   raster in the terminal) and in the band; the `mascot` setting turns him off.

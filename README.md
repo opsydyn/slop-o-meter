@@ -94,9 +94,16 @@ He is presentation only; turn him (and his verdict) off with `mascot` in `/confi
 
 ## Install
 
-Slop-O-Meter is a Claude Code mod: it runs in the Claude Code terminal and the desktop Code tab, not in Claude
-chat or Cowork. It needs a Claude Code build with mods (function hooks; developed against 2.1.286), and git on
-the path. It installs no packages.
+Slop-O-Meter is a Claude Code mod: it runs in Claude Code, not in Claude chat or Cowork. Mods are on by default
+from Claude Code v2.1.287 in the terminal and v2.1.286 in the Desktop app's Code tab. It needs git on the path,
+and installs no packages.
+
+| Where you run Claude Code | Turns scored, guard on | Gauge, band and pane |
+|---|---|---|
+| Terminal, including editor terminals and JetBrains | yes | yes |
+| Desktop app, Code tab | yes | yes |
+| VS Code extension chat panel, `claude -p`, cloud sessions | yes | no: `/slop` prints the explanation as text |
+| Desktop app WSL sessions | no: plugins don't load there | no |
 
 ```bash
 claude plugin marketplace add opsydyn/slop-o-meter
@@ -118,8 +125,8 @@ Installing notes that some options are not yet set: until you set them, their de
 | `/slop reset` | forgets this repository: history, milestones and snapshot indexes |
 | `/slop help` | the commands, and your current settings |
 
-The gauge is an SVG instrument in the desktop Code tab, VS Code and mobile, and a cell raster in the
-terminal. Where no custom drawing is available, `/slop` still prints the full explanation.
+The gauge is an SVG instrument in the Desktop app's Code tab and a cell raster in the terminal. Where nothing
+is drawn, `/slop` still prints the full explanation.
 
 **Settings** (`/config`, under slop-o-meter): `guard` is `off`, `nudge` (default) or `strict`; `mascot` shows or
 hides Płanetnik and his verdict; `milestones` turns milestones and their toasts on or off.
