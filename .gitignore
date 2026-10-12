@@ -2,3 +2,5 @@ node_modules/
 .claude/types/
 .claude-plugin/types/
 *.log
+# No lockfile at the plugin root: Claude Code would install the (dev-only) packages for every user.
+bun.lock

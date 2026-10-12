@@ -94,7 +94,9 @@ He is presentation only; turn him (and his verdict) off with `mascot` in `/confi
 
 ## Install
 
-Requires a Claude Code build with mods (function hooks); developed against 2.1.286. Git must be on the path.
+Slop-O-Meter is a Claude Code mod: it runs in the Claude Code terminal and the desktop Code tab, not in Claude
+chat or Cowork. It needs a Claude Code build with mods (function hooks; developed against 2.1.286), and git on
+the path. It installs no packages.
 
 ```bash
 claude plugin marketplace add opsydyn/slop-o-meter
@@ -143,7 +145,9 @@ What it does on your machine, all auditable in [`hooks/register.tsx`](hooks/regi
 [`src/git.ts`](src/git.ts):
 
 - runs `git` in your repository: `rev-parse`, `ls-files --others`, `add -A` into a **private** index file per
-  session (`.git/slop-o-meter-<session>.index`), `write-tree`, `diff` and `cat-file --batch`. Your real index,
+  session (`.git/slop-o-meter-<session>.index`), `write-tree`, `diff` and `cat-file --batch`. It also runs
+  `cp -n` to seed that private index from your real one (so git can reuse its file cache), and `find … -delete`
+  limited to its own `slop-o-meter*.index` files in `.git/` to clean them up. It runs nothing else. Your real index,
   stash, branches and refs are never touched. The snapshots add unreferenced objects to `.git/objects`, which
   `git gc` cleans up like any other. A day-old index from a finished session is removed when a new session
   starts, and `/slop reset` removes them all; after uninstalling, `rm .git/slop-o-meter*.index` tidies up.

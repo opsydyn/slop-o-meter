@@ -8,7 +8,7 @@ whether it makes the project simpler today or guesses about tomorrow.
 ```bash
 git clone https://github.com/opsydyn/slop-o-meter
 cd slop-o-meter
-bun install                              # dev only: TypeScript and test typings
+bun install                              # dev only: TypeScript and test typings (bun.lock stays uncommitted)
 bun test .spec.                          # scoring, lexer, git and gauge tests; no Claude Code needed
 claude plugin validate --strict .        # the manifest and hooks module, as the engine reads them
 ```

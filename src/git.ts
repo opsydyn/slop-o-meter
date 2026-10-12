@@ -28,7 +28,8 @@ export async function snapshot(run: Run, repo: Repo, key = 'default'): Promise<s
   const index = `${repo.gitDir}/${indexName(key)}`
   // Seed the private index from the real one the first time, so git can reuse
   // its stat cache instead of hashing every file.
-  await run(['sh', '-c', 'test -f "$1" || cp "$2" "$1" 2>/dev/null || true', 'sh', index, `${repo.gitDir}/index`])
+  // `cp -n` never overwrites, so an index this session already has is kept; a missing source just fails quietly.
+  await run(['cp', '-n', `${repo.gitDir}/index`, index])
   const env = { GIT_INDEX_FILE: index }
   const add = await run(['git', '-C', repo.root, 'add', '-A', '--', '.'], { env })
   if (add.exitCode !== 0) return null
