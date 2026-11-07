@@ -5,7 +5,7 @@ import { crossedIntoMud, colorOf, gaugeCells, gaugeSvg, sweep } from '../src/gau
 import { diffTrees, findRepo, readFiles, removeIndexes, snapshot, UNTRACKED_LIMIT, untrackedCount, type Repo, type Run } from '../src/git.ts'
 import { ANALYZABLE } from '../src/analyze.ts'
 import { CELL_ROWS, planetnikAlt, planetnikCells, planetnikFace, planetnikSvg, WIDTH } from '../src/mascot.ts'
-import { backdropSvg, isNotable, isSunbreak, MILESTONES, milestonesIn, notification, verdict, weather } from '../src/delight.ts'
+import { isNotable, isSunbreak, MILESTONES, milestonesIn, notification, verdict, weather } from '../src/delight.ts'
 import { briefing, nudgesFor, phraseHint, report, riskyPhrases, simplifyPrompt, strictNote, type Phrase } from '../src/feedback.ts'
 import { explain, lineDiff, scoreTurn, type FileVersion, type Scored } from '../src/score.ts'
 import type { SlopPause, SlopRecord } from '../types/index.d.ts'
@@ -62,6 +62,26 @@ async function pauseFor($: EngineInterface, pause: SlopPause) {
   const was = await read($, paused)
   if (pause?.reason === 'untracked' && was?.reason !== 'untracked') $.ui.toast(`Slop-O-Meter paused: ${pauseText(pause)}`)
   if (JSON.stringify(was) !== JSON.stringify(pause)) await update($, paused, () => pause)
+}
+
+// Newer engine features, each optional: an engine without one (stable 2.1.311 has no transcript row) leaves the call undefined, and the rest of the hook must go on regardless.
+
+async function placeRow($: EngineInterface, id: string) {
+  try {
+    await $.ui.place({ id })
+  } catch {}
+}
+
+async function notifyPerson($: EngineInterface, text: string) {
+  try {
+    await $.ui.notify(text, { title: 'Slop-O-Meter' })
+  } catch {}
+}
+
+async function paintDraft($: EngineInterface, text: string, found: Phrase[]) {
+  try {
+    await $.prompt.paint({ text, decorations: found.map(underline) })
+  } catch {}
 }
 
 /** Keeps the band's hint in step with the draft, writing only when the phrases change. */
@@ -165,7 +185,6 @@ export const register: Register = (on, options) => {
   /** notable: a row in the transcript when a turn is over budget, changes state or breaks the sun through. */
   const scorecard = options.scorecard === 'always' || options.scorecard === 'off' ? options.scorecard : 'notable'
   const notify = options.notify !== false
-  const weatherBackdrop = options.backdrop === true
   /** off: observe only. nudge: mid-turn notes to Claude. strict: also a note after an over-budget turn. */
   const guard = options.guard === 'off' || options.guard === 'strict' ? options.guard : 'nudge'
 
@@ -177,7 +196,6 @@ export const register: Register = (on, options) => {
       // Checking the meter should not wait for Claude to finish.
       immediate: true,
     })
-    if (weatherBackdrop) await $.ui.backdrop({ id: 'weather', glass: { blur: 18, opacity: 0.6 } }).catch(() => undefined)
     await update($, since, at => at ?? Date.now())
     const r = await getRepo($)
     await update($, paused, () => (r ? null : { reason: 'no-repo' }))
@@ -279,12 +297,12 @@ export const register: Register = (on, options) => {
     }
     if (notify) {
       const said = notification(record, all)
-      if (said) await $.ui.notify(said, { title: 'Slop-O-Meter' }).catch(() => undefined)
+      if (said) await notifyPerson($, said)
     }
     const done = await next(e)
     // After the answer, so the row stands beneath it in the transcript.
     if (scorecard === 'always' || (scorecard === 'notable' && isNotable(record, previous, budget))) {
-      await $.ui.place({ id: `turn-${record.at}` }).catch(() => undefined)
+      await placeRow($, `turn-${record.at}`)
     }
     const note = guard === 'strict' ? strictNote(record, budget) : null
     if (note) {
@@ -303,7 +321,7 @@ export const register: Register = (on, options) => {
     const record = await read($, last)
     if (!['', 'explain', 'diff', 'history', 'report', 'reset'].includes(arg)) {
       const settings = `budget ${budget} · guard ${guard} · mascot ${mascot ? 'on' : 'off'} · milestones ${milestones ? 'on' : 'off'} · ` +
-        `scorecard ${scorecard} · notify ${notify ? 'on' : 'off'} · backdrop ${weatherBackdrop ? 'on' : 'off'}`
+        `scorecard ${scorecard} · notify ${notify ? 'on' : 'off'}`
       return { text: `${arg === 'help' ? '' : `Unknown: /slop ${arg}\n\n`}${HELP}\n\nNow: ${settings}` }
     }
     if (arg === 'reset') {
@@ -355,7 +373,7 @@ export const register: Register = (on, options) => {
     if (guard === 'off') return done
     const found = riskyPhrases(e.text)
     await noteDraft($, found)
-    if (found.length) await $.prompt.paint({ text: e.text, decorations: found.map(underline) }).catch(() => undefined)
+    if (found.length) await paintDraft($, e.text, found)
     return done
   })
 
@@ -387,22 +405,6 @@ export const register: Register = (on, options) => {
           )}
           <Button key="details-row" label="Details" onPress={() => $.ui.open({ id: PANE, title: 'Slop-O-Meter' })} />
         </Box>
-      </Box>
-    )
-  })
-
-  // Płanetnik's weather behind the Desktop window, when the backdrop setting is on.
-  on('ui.render', { component: 'Backdrop' }, async ($, e, next) => {
-    // Only the Desktop app draws a backdrop; the terminal has no Svg to draw it with.
-    if (e.props.plugin !== 'slop-o-meter' || e.surface === 'terminal') return next(e)
-    const record = await read($, last)
-    const { Box, Svg } = $.ui.resolve(e)
-    return (
-      <Box width="100%" height="100%">
-        <Svg
-          source={backdropSvg(record?.score ?? 0, record ? isSunbreak(record) : false)}
-          alt={`Płanetnik's weather: ${record?.state ?? 'CLEAN'}`}
-        />
       </Box>
     )
   })

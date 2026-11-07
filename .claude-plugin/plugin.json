@@ -67,13 +67,6 @@
       "description": "A native notification when a turn falls into Big Ball of Mud or climbs out of it (Sunbreak), through your own notification channel.",
       "default": true,
       "required": false
-    },
-    "backdrop": {
-      "type": "boolean",
-      "title": "Weather backdrop",
-      "description": "Płanetnik's weather behind the Desktop app window: clear sky when clean, storm in the red. Desktop only.",
-      "default": false,
-      "required": false
     }
   }
 }

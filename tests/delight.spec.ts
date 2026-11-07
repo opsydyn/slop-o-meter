@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { backdropSvg, cleanStreak, isNotable, isSunbreak, milestonesIn, notification, verdict, weather } from '../src/delight.ts'
+import { cleanStreak, isNotable, isSunbreak, milestonesIn, notification, verdict, weather } from '../src/delight.ts'
 import { stateOf } from '../src/score.ts'
 import type { SlopComponent, SlopRecord } from '../types/index.d.ts'
 
@@ -108,15 +108,5 @@ describe('notifications', () => {
     expect(notification(turn(90, 3), [])).toBeNull()
     expect(notification(turn(14, -58), [])).toStartWith('Sunbreak: 72 → 14.')
     expect(notification(turn(30, 10), [])).toBeNull()
-  })
-})
-
-describe('the weather backdrop', () => {
-  test('clear with a sun when clean, a bolt in the mud, a sun again at a Sunbreak; it fills any window', () => {
-    expect(backdropSvg(5)).toContain('#ffd66b')
-    expect(backdropSvg(90)).toContain('#fff1a8')
-    expect(backdropSvg(90)).not.toContain('#ffd66b')
-    expect(backdropSvg(14, true)).toContain('#ffd66b')
-    expect(backdropSvg(50)).toContain('preserveAspectRatio="xMidYMid slice"')
   })
 })

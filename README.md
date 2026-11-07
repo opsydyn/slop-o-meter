@@ -103,8 +103,9 @@ He is presentation only; turn him (and his verdict) off with `mascot` in `/confi
 ## Install
 
 Slop-O-Meter is a Claude Code mod: it runs in Claude Code, not in Claude chat or Cowork. Mods are on by default
-from Claude Code v2.1.287 in the terminal and v2.1.286 in the Desktop app's Code tab. It needs git on the path,
-and installs no packages.
+from Claude Code v2.1.287 in the terminal and v2.1.286 in the Desktop app's Code tab; the transcript scorecard
+needs v2.1.317 or later, and an older version simply goes without it. It needs git on the path, and installs no
+packages.
 
 | Where you run Claude Code | Turns scored, guard on | Gauge, band and pane |
 |---|---|---|
@@ -148,7 +149,6 @@ is drawn, `/slop` still prints the full explanation.
 | `notify` | on | native notifications for falling into the mud or climbing out |
 | `mascot` | on | Płanetnik and his verdict |
 | `milestones` | on | milestones and their toasts |
-| `backdrop` | off | Płanetnik's weather behind the Desktop app window: clear sky when clean, storm in the red |
 
 **Budget:** an advisory per-turn score, default 40, shown in the pane as over or under. Set `budget` in
 `/config` under slop-o-meter. Slop-O-Meter observes; it never blocks an edit.

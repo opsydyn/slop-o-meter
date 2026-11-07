@@ -384,16 +384,3 @@ test('an over-budget turn places its row once the answer is in', { options: { bu
   expect(placed).toHaveLength(1)
   expect(placed[0]).toMatch(/^turn-\d+$/)
 })
-
-test('the weather backdrop is set when asked for, and draws the latest score', { options: { backdrop: true } }, async ($, on) => {
-  const set: string[] = []
-  on('ui.backdrop', ($, e, next) => {
-    if (e.backdrop) set.push(e.backdrop.id)
-    return next(e)
-  })
-  await sessionWith($, on, { record: RECORD })
-  expect(set).toEqual(['weather'])
-  const sky = await $.ui.mount({ plugin: 'slop-o-meter', component: 'Backdrop', props: { id: 'weather', plugin: 'slop-o-meter', glass: false }, surface: 'desktop' })
-  expect((await sky.findAll({ type: 'Svg' })).map(s => s.props.alt)).toContain('Płanetnik\'s weather: BIG BALL OF MUD')
-  await sky.unmount()
-})

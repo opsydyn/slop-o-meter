@@ -26,10 +26,10 @@ First release: a deterministic core and the gauge.
 - Ready for real repositories: a snapshot index per session (concurrent sessions never collide), an honest pause
   when more than 5,000 untracked files would slow every turn, a clear message outside git, a first-run welcome,
   `/slop help`, a breakdown that shows only the signals that moved, and changed files as links.
-- Built on Claude Code 2.1.317's mod API: a scorecard row in the transcript after notable turns (`scorecard`),
-  a prompt guard that underlines phrases that invited slop in our tests as you type, native notifications for
-  falling into or climbing out of the mud (`notify`), an opt-in weather backdrop for the Desktop app
-  (`backdrop`), `/slop` that runs mid-turn with an argument hint, and turn state tagged by shape so an update
-  mid-session never misreads it.
+- Built on the newer mod API: a scorecard row in the transcript after notable turns (`scorecard`, Claude Code
+  2.1.317 and later), a prompt guard that underlines phrases that invited slop in our tests as you type, native
+  notifications for falling into or climbing out of the mud (`notify`), `/slop` that runs mid-turn with an
+  argument hint, and turn state tagged by shape so an update mid-session never misreads it. On an engine
+  without one of these, the mod goes on without it.
 - A listing icon: Płanetnik, drawn from the mod's own pixel grid (`bun docs/icon.ts`).
 - Calibrated against fixture scenarios and seven live dogfood experiments (DOGFOOD.md).
