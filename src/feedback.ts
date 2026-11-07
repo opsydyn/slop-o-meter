@@ -162,3 +162,35 @@ export function report(records: SlopRecord[], budget: number): string {
   }
   return lines.join('\n')
 }
+
+/**
+ * Phrases that invited extra layers in our tests: the request that asked for "production-ready and
+ * extensible, following clean architecture" scored about 50 on average, against about 18 for plain asks.
+ */
+const RISKY = [
+  /\bproduction[- ]ready\b/gi,
+  /\bextensible\b/gi,
+  /\bclean architecture\b/gi,
+  /\benterprise[- ](?:grade|ready)\b/gi,
+  /\bscalable\b/gi,
+  /\bfuture[- ]proof(?:ing)?\b/gi,
+  /\b(?:robust and )?configurable\b/gi,
+  /\beasy to add (?:new|more)\b/gi,
+  /\bdesign patterns?\b/gi,
+]
+
+export type Phrase = { start: number; end: number; phrase: string }
+
+/** Where the draft asks for the kind of generality that tends to become slop. */
+export function riskyPhrases(text: string): Phrase[] {
+  const found: Phrase[] = []
+  for (const re of RISKY) {
+    for (const m of text.matchAll(re)) found.push({ start: m.index, end: m.index + m[0].length, phrase: m[0] })
+  }
+  return found.sort((a, b) => a.start - b.start)
+}
+
+/** The band's hint while the draft holds risky phrases. */
+export const phraseHint = (phrases: string[]) =>
+  `${phrases.map(p => `“${p}”`).join(', ')}: asks like this invited extra layers in our tests. ` +
+  'Say what has to vary, or ask for the simplest version first.'

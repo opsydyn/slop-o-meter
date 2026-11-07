@@ -24,6 +24,9 @@ const PALETTE = {
 } as const
 
 export type Pixel = keyof typeof PALETTE
+
+/** A pixel's colour, for drawings outside this module (the listing icon). */
+export const pixelColor = (p: Pixel) => PALETTE[p]
 export type Grid = (Pixel | null)[][]
 type Put = (x: number, y: number, p: Pixel) => void
 

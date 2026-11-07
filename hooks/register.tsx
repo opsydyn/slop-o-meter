@@ -5,8 +5,8 @@ import { crossedIntoMud, colorOf, gaugeCells, gaugeSvg, sweep } from '../src/gau
 import { diffTrees, findRepo, readFiles, removeIndexes, snapshot, UNTRACKED_LIMIT, untrackedCount, type Repo, type Run } from '../src/git.ts'
 import { ANALYZABLE } from '../src/analyze.ts'
 import { CELL_ROWS, planetnikAlt, planetnikCells, planetnikFace, planetnikSvg, WIDTH } from '../src/mascot.ts'
-import { isSunbreak, MILESTONES, milestonesIn, verdict, weather } from '../src/delight.ts'
-import { briefing, nudgesFor, report, simplifyPrompt, strictNote } from '../src/feedback.ts'
+import { backdropSvg, isNotable, isSunbreak, MILESTONES, milestonesIn, notification, verdict, weather } from '../src/delight.ts'
+import { briefing, nudgesFor, phraseHint, report, riskyPhrases, simplifyPrompt, strictNote, type Phrase } from '../src/feedback.ts'
 import { explain, lineDiff, scoreTurn, type FileVersion, type Scored } from '../src/score.ts'
 import type { SlopPause, SlopRecord } from '../types/index.d.ts'
 
@@ -15,12 +15,15 @@ const GAUGE = 'gauge'
 const HISTORY_LIMIT = 200
 /** A result younger than this animates its needle when drawn; older ones draw still. */
 const FRESH_MS = 8000
-const turn = atom({ plugin: 'slop-o-meter', key: 'turn' } as const, null)
+// Tagged: a mod update mid-session reads a turn stored in an older shape as no turn, not as garbage.
+const turn = atom({ plugin: 'slop-o-meter', key: 'turn' } as const, null, { shape: 'turn-3' })
 const last = atom({ plugin: 'slop-o-meter', key: 'last' } as const, null)
 const history = atom({ plugin: 'slop-o-meter', key: 'history' } as const, [])
 const since = atom({ plugin: 'slop-o-meter', key: 'since' } as const, null)
 const earned = atom({ plugin: 'slop-o-meter', key: 'earned' } as const, [])
 const paused = atom({ plugin: 'slop-o-meter', key: 'pause' } as const, null)
+/** The risky phrases in the draft being typed, for the band's hint. */
+const draft = atom({ plugin: 'slop-o-meter', key: 'draft' } as const, [])
 
 let repo: Repo | null | undefined
 /** Width of the terminal gauge as last drawn, so a sweep can blit the mounted raster. */
@@ -60,6 +63,15 @@ async function pauseFor($: EngineInterface, pause: SlopPause) {
   if (pause?.reason === 'untracked' && was?.reason !== 'untracked') $.ui.toast(`Slop-O-Meter paused: ${pauseText(pause)}`)
   if (JSON.stringify(was) !== JSON.stringify(pause)) await update($, paused, () => pause)
 }
+
+/** Keeps the band's hint in step with the draft, writing only when the phrases change. */
+async function noteDraft($: EngineInterface, found: Phrase[]) {
+  const phrases = [...new Set(found.map(f => f.phrase.toLowerCase()))]
+  const was = await read($, draft)
+  if (was.join('|') !== phrases.join('|')) await update($, draft, () => phrases)
+}
+
+const underline = (f: Phrase) => ({ start: f.start, end: f.end, color: '#d29922', underline: true })
 
 function pauseText(pause: NonNullable<SlopPause>): string {
   if (pause.reason === 'no-repo') return 'needs a git repository to measure turns'
@@ -150,14 +162,22 @@ export const register: Register = (on, options) => {
   const budget = typeof options.budget === 'number' ? options.budget : 40
   const mascot = options.mascot !== false
   const milestones = options.milestones !== false
+  /** notable: a row in the transcript when a turn is over budget, changes state or breaks the sun through. */
+  const scorecard = options.scorecard === 'always' || options.scorecard === 'off' ? options.scorecard : 'notable'
+  const notify = options.notify !== false
+  const weatherBackdrop = options.backdrop === true
   /** off: observe only. nudge: mid-turn notes to Claude. strict: also a note after an over-budget turn. */
   const guard = options.guard === 'off' || options.guard === 'strict' ? options.guard : 'nudge'
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'slop',
-      description: 'Slop-O-Meter: the last turn\'s slop score. Args: explain, diff, history, report, reset, help',
+      description: 'Slop-O-Meter: the last turn\'s slop score, and why',
+      argumentHint: 'explain · diff · history · report · reset · help',
+      // Checking the meter should not wait for Claude to finish.
+      immediate: true,
     })
+    if (weatherBackdrop) await $.ui.backdrop({ id: 'weather', glass: { blur: 18, opacity: 0.6 } }).catch(() => undefined)
     await update($, since, at => at ?? Date.now())
     const r = await getRepo($)
     await update($, paused, () => (r ? null : { reason: 'no-repo' }))
@@ -215,7 +235,8 @@ export const register: Register = (on, options) => {
     if (nudges.length === 0) return result
     $.ui.toast(`Slop-O-Meter nudged Claude: ${nudges.map(n => n.signal).join(', ')}`)
     return { ...result, context: [...(result.context ?? []), ...nudges.map(n => n.text)] }
-  })
+  // Our bookkeeping must never decide the tool call: if it throws, the call goes on as it would have.
+  }).catch(($, e, next) => next(e))
 
   on('turn.complete', async ($, e, next) => {
     if (e.agentId !== undefined) return next(e)
@@ -256,7 +277,15 @@ export const register: Register = (on, options) => {
         for (const id of fresh) $.ui.toast(`◆ Milestone: ${MILESTONES.find(m => m.id === id)!.label}`)
       }
     }
+    if (notify) {
+      const said = notification(record, all)
+      if (said) await $.ui.notify(said, { title: 'Slop-O-Meter' }).catch(() => undefined)
+    }
     const done = await next(e)
+    // After the answer, so the row stands beneath it in the transcript.
+    if (scorecard === 'always' || (scorecard === 'notable' && isNotable(record, previous, budget))) {
+      await $.ui.place({ id: `turn-${record.at}` }).catch(() => undefined)
+    }
     const note = guard === 'strict' ? strictNote(record, budget) : null
     if (note) {
       // The model reads the note at the start of the next turn; the notice tells the person it was left.
@@ -273,7 +302,8 @@ export const register: Register = (on, options) => {
     const arg = e.args.trim()
     const record = await read($, last)
     if (!['', 'explain', 'diff', 'history', 'report', 'reset'].includes(arg)) {
-      const settings = `budget ${budget} · guard ${guard} · mascot ${mascot ? 'on' : 'off'} · milestones ${milestones ? 'on' : 'off'}`
+      const settings = `budget ${budget} · guard ${guard} · mascot ${mascot ? 'on' : 'off'} · milestones ${milestones ? 'on' : 'off'} · ` +
+        `scorecard ${scorecard} · notify ${notify ? 'on' : 'off'} · backdrop ${weatherBackdrop ? 'on' : 'off'}`
       return { text: `${arg === 'help' ? '' : `Unknown: /slop ${arg}\n\n`}${HELP}\n\nNow: ${settings}` }
     }
     if (arg === 'reset') {
@@ -302,8 +332,79 @@ export const register: Register = (on, options) => {
     }
     if (arg === '') await $.ui.open({ id: PANE, title: 'Slop-O-Meter' })
     const pause = await read($, paused)
-    const note = pause ? `Not scoring right now: ${pauseText(pause)}.\n\nThe last scored turn:\n` : ''
+    const running = await read($, turn)
+    const ops = running ? Object.values(running.edits).reduce((n, f) => n + f.ops, 0) : 0
+    const note = pause ? `Not scoring right now: ${pauseText(pause)}.\n\nThe last scored turn:\n`
+      : running ? `A turn is in progress (${ops} edits in ${Object.keys(running.edits).length} files so far); it is scored when it ends.\n\nThe last scored turn:\n`
+      : ''
     return { text: `${note}${explain(record)}\n\nbudget ${budget}  ${overBudget(record.score, budget)}` }
+  })
+
+  // The prompt guard: phrases that invited extra layers in our tests are underlined as they are typed.
+  on('prompt.edit', async ($, e, next) => {
+    const box = await next(e)
+    if (guard === 'off') return box
+    const found = riskyPhrases(box.text)
+    await noteDraft($, found)
+    return found.length ? { ...box, decorations: [...(box.decorations ?? []), ...found.map(underline)] } : box
+  })
+
+  // A draft that changed another way (history recall, a clear, a plugin's fill) is painted afresh.
+  on('prompt.change', async ($, e, next) => {
+    const done = await next(e)
+    if (guard === 'off') return done
+    const found = riskyPhrases(e.text)
+    await noteDraft($, found)
+    if (found.length) await $.prompt.paint({ text: e.text, decorations: found.map(underline) }).catch(() => undefined)
+    return done
+  })
+
+  on('prompt.submit', async ($, e, next) => {
+    await noteDraft($, [])
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  // A scored turn's row in the transcript, placed after the answer: the model never reads it.
+  on('ui.render', { component: 'Placed' }, async ($, e, next) => {
+    if (e.props.plugin !== 'slop-o-meter') return next(e)
+    const record = (await read($, history)).find(past => `turn-${past.at}` === e.props.id)
+    const { Box, Button, Text } = $.ui.resolve(e)
+    if (!record) return <Text dimColor>Slop-O-Meter: this turn's score was cleared.</Text>
+    const top = [...record.components].filter(c => c.weight > 0 && c.contribution >= 1).sort((a, b) => b.contribution - a.contribution)[0]
+    const rows = await read($, history)
+    return (
+      <Box flexDirection="column">
+        <Text>
+          <Text bold>SLOP </Text>
+          <Text color={colorOf(record.score)}>{bar(record.score, 8)} {record.score} {record.state} {trend(record.delta)}</Text>
+          {mascot && <Text color="#a39b8e">  {planetnikFace(record.score)}</Text>}
+          <Text dimColor>  {record.score > budget ? overBudget(record.score, budget) : `budget ${budget}`}</Text>
+        </Text>
+        <Text dimColor wrap="wrap">{mascot ? `Płanetnik: “${verdict(record, rows)}”` : top ? `${top.label}: ${top.reason}` : 'nothing scored'}</Text>
+        <Box flexDirection="row" gap={1}>
+          {record.score > 20 && (
+            <Button key="simplify-row" label="Simplify" onPress={() => $.prompt.submit({ text: simplifyPrompt(record) })} />
+          )}
+          <Button key="details-row" label="Details" onPress={() => $.ui.open({ id: PANE, title: 'Slop-O-Meter' })} />
+        </Box>
+      </Box>
+    )
+  })
+
+  // Płanetnik's weather behind the Desktop window, when the backdrop setting is on.
+  on('ui.render', { component: 'Backdrop' }, async ($, e, next) => {
+    // Only the Desktop app draws a backdrop; the terminal has no Svg to draw it with.
+    if (e.props.plugin !== 'slop-o-meter' || e.surface === 'terminal') return next(e)
+    const record = await read($, last)
+    const { Box, Svg } = $.ui.resolve(e)
+    return (
+      <Box width="100%" height="100%">
+        <Svg
+          source={backdropSvg(record?.score ?? 0, record ? isSunbreak(record) : false)}
+          alt={`Płanetnik's weather: ${record?.state ?? 'CLEAN'}`}
+        />
+      </Box>
+    )
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -312,6 +413,7 @@ export const register: Register = (on, options) => {
     const record = await read($, last)
     const pause = await read($, paused)
     const t = e.props.isWorking ? await read($, turn) : null
+    const risky = e.props.isWorking ? [] : await read($, draft)
     const files = t ? Object.keys(t.edits).length : 0
     const ops = t ? Object.values(t.edits).reduce((n, f) => n + f.ops, 0) : 0
     // The band is shared: draw whatever other mods (and the engine) put beneath us too.
@@ -332,6 +434,7 @@ export const register: Register = (on, options) => {
         {mascot && record && <Text color="#a39b8e">  {planetnikFace(record.score)}</Text>}
         {t && <Text dimColor>  · analysing… {ops} edits in {files} files</Text>}
       </Box>
+      {risky.length > 0 && <Text color="#d29922" wrap="wrap">⚑ {phraseHint(risky)}</Text>}
       {below}
       </Box>
     )

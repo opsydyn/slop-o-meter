@@ -63,8 +63,10 @@ rsync -a --delete --exclude='/.claude-plugin/types' --include='/.claude-plugin/*
 
 ## The README images
 
-`docs/hero.svg` and the Płanetnik images are drawn by the mod's own code. After changing the gauge or
-Płanetnik, redraw the hero with `bun docs/hero.ts`.
+`docs/hero.svg`, the Płanetnik images and the listing icon `.claude-plugin/icon.png` are drawn by the mod's own
+code. After changing the gauge or Płanetnik, redraw them with `bun docs/hero.ts` and `bun docs/icon.ts`. The
+plugin directory takes the icon only the first time the plugin is submitted, so later changes to it reach the
+README only.
 
 ## Changing the scoring
 

@@ -48,6 +48,32 @@
       "description": "Earn milestones for good habits (clean streaks, Sunbreaks, no any, net-negative turns), with a toast when one is earned.",
       "default": true,
       "required": false
+    },
+    "scorecard": {
+      "type": "string",
+      "title": "Scorecard in the transcript",
+      "description": "notable: a row under Claude's answer when a turn is over budget, changes state or breaks the sun through. always: after every scored turn. off: none.",
+      "options": [
+        "notable",
+        "always",
+        "off"
+      ],
+      "default": "notable",
+      "required": false
+    },
+    "notify": {
+      "type": "boolean",
+      "title": "Notify",
+      "description": "A native notification when a turn falls into Big Ball of Mud or climbs out of it (Sunbreak), through your own notification channel.",
+      "default": true,
+      "required": false
+    },
+    "backdrop": {
+      "type": "boolean",
+      "title": "Weather backdrop",
+      "description": "Płanetnik's weather behind the Desktop app window: clear sky when clean, storm in the red. Desktop only.",
+      "default": false,
+      "required": false
     }
   }
 }

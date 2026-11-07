@@ -26,9 +26,11 @@ type Session = {
   untracked?: number
   /** Not a git repository at all. */
   noRepo?: boolean
+  /** Collects what the mod registers as commands. */
+  commands?: { argumentHint?: string; immediate?: boolean }[]
 }
 
-async function sessionWith($: Engine, on: On, { record, numstat = '', stored = {}, untracked = 0, noRepo = false }: Session = {}) {
+async function sessionWith($: Engine, on: On, { record, numstat = '', stored = {}, untracked = 0, noRepo = false, commands = [] }: Session = {}) {
   // Git, as far as the mod asks it: the repository root, and a tree id for every snapshot.
   on('process.run', ($, e) => {
     const stdout = e.argv[1] === 'rev-parse' ? `${ROOT}\n${ROOT}/.git\n`
@@ -38,7 +40,10 @@ async function sessionWith($: Engine, on: On, { record, numstat = '', stored = {
     const exitCode = noRepo && e.argv[1] === 'rev-parse' ? 128 : 0
     return { value: { exitCode, stdout: exitCode ? '' : stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
-  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('command.register', ($, e) => {
+    commands.push(e)
+    return { value: { command: e.name } }
+  })
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   // The engine's own band, beneath every mod: empty here.
   on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
@@ -336,4 +341,59 @@ test('a new repository gets one welcome, and only one', async ($, on) => {
   await sessionWith($, on)
   await $.session.start({ cwd: ROOT, surface: null, isInteractive: true })
   expect(toasts.filter(t => t.startsWith('Slop-O-Meter is watching this repository'))).toHaveLength(1)
+})
+
+test('/slop runs mid-turn and shows its arguments as a hint', async ($, on) => {
+  const registered: { argumentHint?: string; immediate?: boolean }[] = []
+  on('turn.start', ($, e) => ({ turnId: e.turnId }))
+  await sessionWith($, on, { record: RECORD, commands: registered })
+  expect(registered[0]?.immediate).toBe(true)
+  expect(registered[0]?.argumentHint).toBe('explain · diff · history · report · reset · help')
+  await $.turn.start({ text: 'refactor', turnId: 't1' })
+  const ran = await $.command.run({ command: 'slop', args: 'explain', ...PROMPT })
+  expect(ran.text).toStartWith('A turn is in progress (0 edits in 0 files so far)')
+})
+
+// The prompt guard's prompt.edit and prompt.change hooks can't be driven from this test host
+// (it raises neither); riskyPhrases and phraseHint are covered in feedback.spec.ts.
+
+test('a scored turn has a row in the transcript, with Simplify and Details', async ($, on) => {
+  await sessionWith($, on, { record: RECORD })
+  for (const surface of SURFACES) {
+    const row = await $.ui.mount({ plugin: 'slop-o-meter', component: 'Placed', props: { id: `turn-${RECORD.at}`, plugin: 'slop-o-meter' }, surface })
+    const texts = await textsOf(row)
+    expect(texts.some(t => /87 BIG BALL OF MUD/.test(t))).toBe(true)
+    expect(texts.some(t => t.startsWith('Płanetnik: “Burza!'))).toBe(true)
+    expect(await row.find({ type: 'Button', key: 'simplify-row' })).toBeDefined()
+    expect(await row.find({ type: 'Button', key: 'details-row' })).toBeDefined()
+    await row.unmount()
+  }
+})
+
+test('an over-budget turn places its row once the answer is in', { options: { budget: 0 } }, async ($, on) => {
+  const placed: string[] = []
+  on('ui.place', ($, e, next) => {
+    placed.push(e.id)
+    return next(e)
+  })
+  on('turn.start', ($, e) => ({ turnId: e.turnId }))
+  on('turn.complete', ($, e) => ({ text: e.answer }))
+  await sessionWith($, on, { numstat: '300\t0\tsrc/worker.py\0' })
+  await $.turn.start({ text: 'write a worker', turnId: 't1' })
+  await $.turn.complete({ answer: 'done', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+  expect(placed).toHaveLength(1)
+  expect(placed[0]).toMatch(/^turn-\d+$/)
+})
+
+test('the weather backdrop is set when asked for, and draws the latest score', { options: { backdrop: true } }, async ($, on) => {
+  const set: string[] = []
+  on('ui.backdrop', ($, e, next) => {
+    if (e.backdrop) set.push(e.backdrop.id)
+    return next(e)
+  })
+  await sessionWith($, on, { record: RECORD })
+  expect(set).toEqual(['weather'])
+  const sky = await $.ui.mount({ plugin: 'slop-o-meter', component: 'Backdrop', props: { id: 'weather', plugin: 'slop-o-meter', glass: false }, surface: 'desktop' })
+  expect((await sky.findAll({ type: 'Svg' })).map(s => s.props.alt)).toContain('Płanetnik\'s weather: BIG BALL OF MUD')
+  await sky.unmount()
 })

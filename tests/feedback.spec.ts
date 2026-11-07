@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { briefing, nudgesFor, report, simplifyPrompt, strictNote } from '../src/feedback.ts'
+import { briefing, nudgesFor, phraseHint, report, riskyPhrases, simplifyPrompt, strictNote } from '../src/feedback.ts'
 import type { SlopRecord, SlopTurn } from '../types/index.d.ts'
 
 const turn = (over: Partial<SlopTurn> = {}): SlopTurn => ({ baseline: 'x', edits: {}, ...over })
@@ -157,5 +157,22 @@ describe('the briefing', () => {
     expect(text).toContain('new documentation files the request did not ask for')
     expect(text).toContain('let TypeScript infer the rest: a declared type for every input and result is sprawl')
     expect(text).toContain('Never cut requested scope, tests or correctness to lower the score.')
+  })
+})
+
+describe('the prompt guard', () => {
+  test('finds the phrases that invited layers, with their places in the draft', () => {
+    const draft = 'Add discount codes. Make it production-ready and extensible, following clean architecture.'
+    const found = riskyPhrases(draft)
+    expect(found.map(f => f.phrase)).toEqual(['production-ready', 'extensible', 'clean architecture'])
+    for (const f of found) expect(draft.slice(f.start, f.end)).toBe(f.phrase)
+  })
+
+  test('says nothing about a plain request', () => {
+    expect(riskyPhrases('Add a /search route that filters items by name')).toEqual([])
+  })
+
+  test('the hint quotes the phrases and suggests what to say instead', () => {
+    expect(phraseHint(['extensible'])).toBe('“extensible”: asks like this invited extra layers in our tests. Say what has to vary, or ask for the simplest version first.')
   })
 })

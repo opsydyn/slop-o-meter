@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { cleanStreak, isSunbreak, milestonesIn, verdict, weather } from '../src/delight.ts'
+import { backdropSvg, cleanStreak, isNotable, isSunbreak, milestonesIn, notification, verdict, weather } from '../src/delight.ts'
 import { stateOf } from '../src/score.ts'
 import type { SlopComponent, SlopRecord } from '../types/index.d.ts'
 
@@ -89,5 +89,34 @@ describe('milestones', () => {
     expect(milestonesIn([turn(10, null, [], [{ path: 'src/a.ts', added: 3, deleted: 40 }])])).toContain('net-negative')
     expect(milestonesIn([turn(10, null, [], [{ path: 'src/a.ts', added: 30, deleted: 40 }])])).toContain('net-negative')
     expect(milestonesIn([turn(10, null, [], [{ path: 'src/a.ts', added: 3, deleted: 5 }])])).not.toContain('net-negative')
+  })
+})
+
+describe('the transcript scorecard', () => {
+  test('notable: over budget, a change of state, or a Sunbreak; quiet otherwise', () => {
+    const calm = turn(12, null)
+    expect(isNotable(turn(45, 33), calm, 40)).toBe(true)
+    expect(isNotable(turn(30, 18), calm, 40)).toBe(true)
+    expect(isNotable(turn(14, 2), calm, 40)).toBe(false)
+    expect(isNotable(turn(14, -58), turn(72, null), 40)).toBe(true)
+  })
+})
+
+describe('notifications', () => {
+  test('only for falling into the mud or climbing out of it', () => {
+    expect(notification(turn(87, 30), [])).toMatch(/^Big Ball of Mud: 87\. Burza!|^Big Ball of Mud: 87\./)
+    expect(notification(turn(90, 3), [])).toBeNull()
+    expect(notification(turn(14, -58), [])).toStartWith('Sunbreak: 72 → 14.')
+    expect(notification(turn(30, 10), [])).toBeNull()
+  })
+})
+
+describe('the weather backdrop', () => {
+  test('clear with a sun when clean, a bolt in the mud, a sun again at a Sunbreak; it fills any window', () => {
+    expect(backdropSvg(5)).toContain('#ffd66b')
+    expect(backdropSvg(90)).toContain('#fff1a8')
+    expect(backdropSvg(90)).not.toContain('#ffd66b')
+    expect(backdropSvg(14, true)).toContain('#ffd66b')
+    expect(backdropSvg(50)).toContain('preserveAspectRatio="xMidYMid slice"')
   })
 })

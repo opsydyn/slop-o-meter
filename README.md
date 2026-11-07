@@ -50,7 +50,15 @@ Crossing into Big Ball of Mud slams the needle into the red once; staying there 
 ## The guard
 
 A meter that only you can see tells you about slop after the fact. The guard turns the same measurements
-into feedback for Claude, while it works:
+into feedback, as early as it can:
+
+- **Before Claude starts: the prompt guard.** Phrases that invited extra layers in our tests (*production-ready*,
+  *extensible*, *clean architecture*, *configurable*, *easy to add new…*) are underlined as you type them, with a
+  hint above the prompt: say what has to vary, or ask for the simplest version first. Requests phrased that way
+  scored about 50 on average in our runs, against about 18 for plain asks. It decorates your draft only; it never
+  changes what you send.
+- **At the start of a session: the briefing.** Claude is told what is measured and the budget, and never to cut
+  requested scope, tests or correctness for a lower score.
 
 - **Mid-turn nudges** (`guard: nudge`, the default). When a turn piles up abstractions (a third `…Service`,
   `…Validator` or `…Factory`, or a sixth new type of any name), adds `any`, double casts or `@ts-ignore` to a file,
@@ -116,8 +124,10 @@ Installing notes that some options are not yet set: until you set them, their de
 
 | Where | What you see |
 |---|---|
-| above the prompt | `SLOP ███░░░░░ 23 MILD SLOP ↗ +4`, and live edit activity while a turn runs |
-| `/slop` | the pane: gauge, Płanetnik's verdict, budget, score breakdown, changed files, forecast, milestones |
+| above the prompt | `SLOP ███░░░░░ 23 MILD SLOP ↗ +4`, live edit activity while a turn runs, and the prompt guard's hint |
+| in the transcript | a scorecard under Claude's answer when a turn is over budget, changes state or breaks the sun through: score, Płanetnik's verdict, **Simplify** and **Details** |
+| your notifications | a native notification when a turn falls into Big Ball of Mud or climbs out of it |
+| `/slop` | the pane: gauge, Płanetnik's verdict, budget, score breakdown, changed files, forecast, milestones. Works mid-turn too |
 | `/slop explain` | the explanation only |
 | `/slop diff` | the files the last scored turn changed |
 | `/slop history` | the last 20 scored turns |
@@ -128,8 +138,17 @@ Installing notes that some options are not yet set: until you set them, their de
 The gauge is an SVG instrument in the Desktop app's Code tab and a cell raster in the terminal. Where nothing
 is drawn, `/slop` still prints the full explanation.
 
-**Settings** (`/config`, under slop-o-meter): `guard` is `off`, `nudge` (default) or `strict`; `mascot` shows or
-hides Płanetnik and his verdict; `milestones` turns milestones and their toasts on or off.
+**Settings** (`/config`, under slop-o-meter):
+
+| Setting | Default | What it does |
+|---|---|---|
+| `budget` | 40 | the advisory per-turn score |
+| `guard` | `nudge` | `off`, `nudge` (briefing, prompt guard, nudges) or `strict` (also a note after an over-budget turn) |
+| `scorecard` | `notable` | the transcript row: `notable`, `always` or `off` |
+| `notify` | on | native notifications for falling into the mud or climbing out |
+| `mascot` | on | Płanetnik and his verdict |
+| `milestones` | on | milestones and their toasts |
+| `backdrop` | off | Płanetnik's weather behind the Desktop app window: clear sky when clean, storm in the red |
 
 **Budget:** an advisory per-turn score, default 40, shown in the pane as over or under. Set `budget` in
 `/config` under slop-o-meter. Slop-O-Meter observes; it never blocks an edit.
@@ -145,8 +164,10 @@ Slop-O-Meter does not send your source code anywhere. By default it:
 - approves no tool calls and reads no secrets or environment
 
 It talks to Claude only through the guard, in plain advisory text built from its own measurements, and every
-note it gives Claude is shown to you (a toast for a nudge, a transcript notice for a strict-mode note).
-`guard: off` stops it entirely.
+note it gives Claude is shown to you (a toast for a nudge, a transcript notice for a strict-mode note). It reads
+the prompt you are typing, on your machine, only to underline phrases in it, and never changes or sends it. The
+transcript scorecard is display only: Claude never reads it. Notifications go through your own notification
+setting. `guard: off` stops the briefing, the prompt guard and the nudges entirely.
 
 What it does on your machine, all auditable in [`hooks/register.tsx`](hooks/register.tsx) and
 [`src/git.ts`](src/git.ts):

@@ -57,7 +57,7 @@ export type SlopTurn = {
 declare module 'claude-code' {
   interface PluginState {
     'slop-o-meter': {
-      turn: SlopTurn | null
+      turn: Shaped<SlopTurn | null>
       last: SlopRecord | null
       history: SlopRecord[]
       /** When this session began, so /slop report covers the session alone. */
@@ -65,6 +65,8 @@ declare module 'claude-code' {
       /** Milestones this repository has earned, by id. */
       earned: string[]
       pause: SlopPause
+      /** Risky phrases in the draft being typed. */
+      draft: string[]
     }
   }
 }

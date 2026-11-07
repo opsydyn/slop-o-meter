@@ -90,3 +90,49 @@ export function milestonesIn(history: SlopRecord[]): string[] {
   if (history.some(r => r.state === 'CLEAN' && deleted(r) > added(r) && deleted(r) >= 10)) earned.push('net-negative')
   return earned
 }
+
+/** Whether a turn earns a row in the transcript when only notable turns do. */
+export function isNotable(record: SlopRecord, previous: SlopRecord | null, budget: number): boolean {
+  return record.score > budget || record.state !== previous?.state || isSunbreak(record)
+}
+
+/** The native notification for a turn, when one is worth interrupting for: into the mud, or out of it. */
+export function notification(record: SlopRecord, history: SlopRecord[]): string | null {
+  const previous = record.delta === null ? null : record.score - record.delta
+  if (isSunbreak(record)) return `Sunbreak: ${previous} → ${record.score}. ${verdict(record, history)}`
+  if (record.score >= 81 && (previous === null || previous < 81)) return `Big Ball of Mud: ${record.score}. ${verdict(record, history)}`
+  return null
+}
+
+const SKIES = [
+  { top: '#7fb6e6', bottom: '#d9ecf7', cloud: '#ffffff', clouds: 1 },
+  { top: '#93b3cf', bottom: '#d6e2ea', cloud: '#f3f5f7', clouds: 3 },
+  { top: '#7d8a99', bottom: '#b9c2cb', cloud: '#c9ced4', clouds: 5 },
+  { top: '#3d4654', bottom: '#6b7480', cloud: '#59606b', clouds: 7 },
+  { top: '#1b2029', bottom: '#3a404b', cloud: '#2f343d', clouds: 9 },
+]
+
+/**
+ * Płanetnik's weather behind the whole Desktop window: clear sky when clean, storm in the red,
+ * the sun through the clouds at a Sunbreak. Scales to any window (it slices, never stretches).
+ */
+export function backdropSvg(score: number, sunbreak = false): string {
+  const mood = ['CLEAN', 'MILD SLOP', 'GETTING SLOPPY', 'HEAVY SLOP', 'BIG BALL OF MUD'].indexOf(stateOf(score))
+  const sky = SKIES[mood]!
+  const clouds = Array.from({ length: sky.clouds }, (_, i) => {
+    const x = (i * 263) % 1500 - 60
+    const y = 40 + ((i * 97) % 260)
+    const w = 220 + ((i * 53) % 160)
+    return `<g fill="${sky.cloud}" opacity="0.85"><ellipse cx="${x + w / 2}" cy="${y + 30}" rx="${w / 2}" ry="34"/>` +
+      `<ellipse cx="${x + w / 3}" cy="${y + 12}" rx="${w / 4}" ry="30"/><ellipse cx="${x + (2 * w) / 3}" cy="${y + 14}" rx="${w / 5}" ry="26"/></g>`
+  }).join('')
+  const rain = mood >= 3
+    ? `<g stroke="#9db4cc" stroke-width="2" opacity="0.35">${Array.from({ length: 60 }, (_, i) =>
+      `<line x1="${(i * 37) % 1440}" y1="${200 + ((i * 71) % 600)}" x2="${(i * 37) % 1440 - 14}" y2="${236 + ((i * 71) % 600)}"/>`).join('')}</g>`
+    : ''
+  const bolt = mood === 4 ? '<path d="M 980 120 L 940 260 L 990 260 L 930 430 L 1050 230 L 995 230 L 1040 120 Z" fill="#fff1a8" opacity="0.8"/>' : ''
+  const sun = sunbreak || mood === 0 ? '<circle cx="1220" cy="150" r="70" fill="#ffd66b" opacity="0.9"/>' : ''
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" width="100%" height="100%" preserveAspectRatio="xMidYMid slice">` +
+    `<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${sky.top}"/><stop offset="1" stop-color="${sky.bottom}"/></linearGradient></defs>` +
+    `<rect width="1440" height="900" fill="url(#sky)"/>${sun}${clouds}${rain}${bolt}</svg>`
+}
