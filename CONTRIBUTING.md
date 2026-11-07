@@ -26,13 +26,13 @@ CI typechecks everything except the hooks module (`tsconfig.ci.json`), and valid
 
 | Path | What |
 |---|---|
-| `hooks/register.tsx` | the mod: turn events, edit tracking, `/slop`, the band and the pane |
+| `hooks/register.tsx` | the mod: turn events, edit tracking, `/slop`, the band, the pane, the transcript row and the prompt guard's underlines |
 | `src/git.ts` | turn snapshots through a private index; diffs; reading both sides of a change |
 | `src/analyze.ts` | the JS/TS lexer and the per-file facts |
 | `src/score.ts` | metrics, the evidence combination, explanations |
 | `src/gauge.ts` | the SVG gauge and terminal raster, as pure functions |
-| `src/feedback.ts` | the guard: mid-turn nudges, the strict-mode note, the Simplify prompt, `/slop report` |
-| `src/delight.ts` | Płanetnik's verdict, the Sunbreak, the forecast, milestones |
+| `src/feedback.ts` | the guard: the prompt guard's phrases, mid-turn nudges, the strict-mode note, the Simplify prompt, `/slop report` |
+| `src/delight.ts` | Płanetnik's verdict, the Sunbreak, the forecast, milestones, which turns earn a row and a notification |
 | `src/mascot.ts` | Płanetnik: one pixel grid per score, drawn as SVG and as terminal cells |
 | `types/index.d.ts` | the mod's state contract and shared types |
 | `tests/fixtures/scenarios.ts` | whole-turn scenarios; two are recorded live experiments |

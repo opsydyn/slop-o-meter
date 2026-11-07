@@ -172,8 +172,10 @@ const HELP = [
   '/slop reset      forget this repository: history, milestones and snapshot indexes',
   '/slop help       this',
   '',
+  '/slop works mid-turn too: it shows the edits so far.',
+  '',
   'Settings, in /config under slop-o-meter: budget (default 40), guard (off · nudge · strict),',
-  'mascot (Płanetnik and his verdict), milestones.',
+  'mascot (Płanetnik and his verdict), milestones, scorecard (notable · always · off), notify.',
 ].join('\n')
 const relative = (r: Repo, path: string) =>
   path.startsWith(`${r.root}/`) ? path.slice(r.root.length + 1) : null
